@@ -370,6 +370,19 @@ func (s *EthClient) ReadStorageAt(ctx context.Context, address common.Address, s
 	return common.BytesToHash(value.Bytes()), nil
 }
 
+// GetTransactionByBlockHashAndIndex returns the transaction at the given index in the block with the given hash.
+func (s *EthClient) TxByBlockHashAndIndex(ctx context.Context, blockHash common.Hash, index uint64) (*types.Transaction, error) {
+	var tx *types.Transaction
+	err := s.client.CallContext(ctx, &tx, "eth_getTransactionByBlockHashAndIndex", blockHash.Hex(), hexutil.EncodeUint64(index))
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch transaction in block %s at index %d: %w", blockHash, index, err)
+	}
+	if tx == nil {
+		return nil, ethereum.NotFound
+	}
+	return tx, nil
+}
+
 func (s *EthClient) Close() {
 	s.client.Close()
 }

@@ -8,6 +8,7 @@ import (
 
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/log"
 
 	"github.com/ethereum-optimism/optimism/op-node/rollup"
@@ -158,12 +159,33 @@ func (s *L2Client) SystemConfigByL2Hash(ctx context.Context, hash common.Hash) (
 		return ref, nil
 	}
 
-	envelope, err := s.PayloadByHash(ctx, hash)
+	header, err := s.InfoByHash(ctx, hash)
 	if err != nil {
 		// w%: wrap to preserve ethereum.NotFound case
-		return eth.SystemConfig{}, fmt.Errorf("failed to determine block-hash of hash %v, could not get payload: %w", hash, err)
+		return eth.SystemConfig{}, fmt.Errorf("failed to determine block-hash of hash %v, could not get header: %w", hash, err)
 	}
-	cfg, err := derive.PayloadToSystemConfig(s.rollupCfg, envelope.ExecutionPayload)
+	txs := []hexutil.Bytes{}
+	first_tx, err := s.TxByBlockHashAndIndex(ctx, hash, 0)
+	if err == nil {
+		first_tx_binary, err := first_tx.MarshalBinary()
+		if err != nil {
+			return eth.SystemConfig{}, fmt.Errorf("failed to determine block-hash of hash %v, could not marshal first tx: %w", hash, err)
+		}
+		txs = append(txs, first_tx_binary)
+	} else if err != ethereum.NotFound {
+		// w%: wrap to preserve ethereum.NotFound case
+		return eth.SystemConfig{}, fmt.Errorf("failed to determine block-hash of hash %v, could not get first tx: %w", hash, err)
+	}
+
+	// PayloadToSystemConfig only needs this fields from the header
+	payload := eth.ExecutionPayload{}
+	payload.BlockNumber = hexutil.Uint64(header.NumberU64())
+	payload.BlockHash = header.Hash()
+	payload.Timestamp = hexutil.Uint64(header.Time())
+	payload.GasLimit = hexutil.Uint64(header.GasLimit())
+	payload.Transactions = txs
+
+	cfg, err := derive.PayloadToSystemConfig(s.rollupCfg, &payload)
 	if err != nil {
 		return eth.SystemConfig{}, err
 	}
