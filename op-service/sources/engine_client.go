@@ -142,6 +142,27 @@ func (s *EngineAPIClient) NewPayload(ctx context.Context, payload *eth.Execution
 	return &result, nil
 }
 
+// NewPayload executes a full block on the execution engine.
+// This returns a PayloadStatusV1 which encodes any validation/processing error,
+// and this type of error is kept separate from the returned `error` used for RPC errors, like timeouts.
+func (s *EngineAPIClient) NewPayloadWithPayloadId(ctx context.Context, payloadInfo eth.PayloadInfo, parentBeaconBlockRoot *common.Hash) (*eth.PayloadStatusV1, error) {
+	e := s.log.New("engine_newPayloadV3ById, payload_id:", payloadInfo.ID)
+	e.Trace("sending payload id for execution")
+
+	execCtx, cancel := context.WithTimeout(ctx, time.Second*5)
+	defer cancel()
+	var result eth.PayloadStatusV1
+
+	var err = s.RPC.CallContext(execCtx, &result, string(eth.NewPayloadV3ById), payloadInfo.ID, []common.Hash{}, parentBeaconBlockRoot)
+
+	e.Trace("Received payload execution result", "status", result.Status, "latestValidHash", result.LatestValidHash, "message", result.ValidationError)
+	if err != nil {
+		e.Error("Payload execution failed", "err", err)
+		return nil, fmt.Errorf("failed to execute payload: %w", err)
+	}
+	return &result, nil
+}
+
 // GetPayload gets the execution payload associated with the PayloadId.
 // There may be two types of error:
 // 1. `error` as eth.InputError: the payload ID may be unknown
@@ -168,7 +189,7 @@ func (s *EngineAPIClient) GetPayload(ctx context.Context, payloadInfo eth.Payloa
 		}
 		return nil, err
 	}
-	e.Trace("Received payload")
+	e.Trace("Received payload", string(method), *result.ExecutionPayload)
 	return &result, nil
 }
 

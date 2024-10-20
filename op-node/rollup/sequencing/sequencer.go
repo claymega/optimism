@@ -276,23 +276,26 @@ func (d *Sequencer) onBuildSealed(x engine.BuildSealedEvent) {
 		"txs", len(x.Envelope.ExecutionPayload.Transactions),
 		"time", uint64(x.Envelope.ExecutionPayload.Timestamp))
 
+	//TODO(silas): CommitUnsafePayload
 	// generous timeout, the conductor is important
-	ctx, cancel := context.WithTimeout(d.ctx, time.Second*30)
-	defer cancel()
-	if err := d.conductor.CommitUnsafePayload(ctx, x.Envelope); err != nil {
-		d.emitter.Emit(rollup.EngineTemporaryErrorEvent{
-			Err: fmt.Errorf("failed to commit unsafe payload to conductor: %w", err)})
-		return
-	}
+	// ctx, cancel := context.WithTimeout(d.ctx, time.Second*30)
+	// defer cancel()
+	// if err := d.conductor.CommitUnsafePayload(ctx, x.Envelope); err != nil {
+	// 	d.emitter.Emit(rollup.EngineTemporaryErrorEvent{
+	// 		Err: fmt.Errorf("failed to commit unsafe payload to conductor: %w", err)})
+	// 	return
+	// }
 
+	//TODO(silas): start gossip
 	// begin gossiping as soon as possible
 	// asyncGossip.Clear() will be called later if an non-temporary error is found,
 	// or if the payload is successfully inserted
-	d.asyncGossip.Gossip(x.Envelope)
+	//d.asyncGossip.Gossip(x.Envelope)
 	// Now after having gossiped the block, try to put it in our own canonical chain
 	d.emitter.Emit(engine.PayloadProcessEvent{
 		IsLastInSpan: x.IsLastInSpan,
 		DerivedFrom:  x.DerivedFrom,
+		Info:         x.Info,
 		Envelope:     x.Envelope,
 		Ref:          x.Ref,
 	})

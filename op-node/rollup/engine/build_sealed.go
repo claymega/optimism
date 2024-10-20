@@ -27,6 +27,7 @@ func (eq *EngDeriver) onBuildSealed(ev BuildSealedEvent) {
 		eq.emitter.Emit(PayloadProcessEvent{
 			IsLastInSpan: ev.IsLastInSpan,
 			DerivedFrom:  ev.DerivedFrom,
+			Info:         ev.Info,
 			Envelope:     ev.Envelope,
 			Ref:          ev.Ref,
 		})

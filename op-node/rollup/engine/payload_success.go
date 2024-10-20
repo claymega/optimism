@@ -10,6 +10,8 @@ type PayloadSuccessEvent struct {
 	// payload is promoted to pending-safe if non-zero
 	DerivedFrom eth.L1BlockRef
 
+	Info eth.PayloadInfo
+
 	Envelope *eth.ExecutionPayloadEnvelope
 	Ref      eth.L2BlockRef
 }

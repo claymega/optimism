@@ -14,6 +14,8 @@ type PayloadProcessEvent struct {
 	// payload is promoted to pending-safe if non-zero
 	DerivedFrom eth.L1BlockRef
 
+	Info eth.PayloadInfo
+
 	Envelope *eth.ExecutionPayloadEnvelope
 	Ref      eth.L2BlockRef
 }
@@ -25,9 +27,9 @@ func (ev PayloadProcessEvent) String() string {
 func (eq *EngDeriver) onPayloadProcess(ev PayloadProcessEvent) {
 	ctx, cancel := context.WithTimeout(eq.ctx, payloadProcessTimeout)
 	defer cancel()
-
-	status, err := eq.ec.engine.NewPayload(ctx,
-		ev.Envelope.ExecutionPayload, ev.Envelope.ParentBeaconBlockRoot)
+	eq.log.Info("payload-process, NewPayloadWithPayloadId, payload info:", ev.Info)
+	status, err := eq.ec.engine.NewPayloadWithPayloadId(ctx,
+		ev.Info, ev.Envelope.ParentBeaconBlockRoot)
 	if err != nil {
 		eq.emitter.Emit(rollup.EngineTemporaryErrorEvent{
 			Err: fmt.Errorf("failed to insert execution payload: %w", err)})
