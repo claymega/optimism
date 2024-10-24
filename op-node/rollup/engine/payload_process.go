@@ -27,7 +27,7 @@ func (ev PayloadProcessEvent) String() string {
 func (eq *EngDeriver) onPayloadProcess(ev PayloadProcessEvent) {
 	ctx, cancel := context.WithTimeout(eq.ctx, payloadProcessTimeout)
 	defer cancel()
-	eq.log.Info("payload-process, NewPayloadWithPayloadId, payload info:", ev.Info)
+	eq.log.Debug("payload-process, NewPayloadWithPayloadId, payload info:", "info", ev.Info)
 	status, err := eq.ec.engine.NewPayloadWithPayloadId(ctx,
 		ev.Info, ev.Envelope.ParentBeaconBlockRoot)
 	if err != nil {

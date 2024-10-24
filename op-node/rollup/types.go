@@ -493,11 +493,31 @@ func (c *Config) NewPayloadVersion(timestamp uint64) eth.EngineAPIMethod {
 	}
 }
 
+// NewPayloadByIdVersion returns the EngineAPIMethod suitable for the chain hard fork version.
+func (c *Config) NewPayloadByIdVersion(timestamp uint64) eth.EngineAPIMethod {
+	if c.IsEcotone(timestamp) {
+		// Cancun
+		return eth.NewPayloadV3ById
+	} else {
+		panic("Unsupported Engine API version")
+	}
+}
+
 // GetPayloadVersion returns the EngineAPIMethod suitable for the chain hard fork version.
 func (c *Config) GetPayloadVersion(timestamp uint64) eth.EngineAPIMethod {
 	if c.IsEcotone(timestamp) {
 		// Cancun
 		return eth.GetPayloadV3
+	} else {
+		return eth.GetPayloadV2
+	}
+}
+
+// GetMinimizedPayloadVersion returns the EngineAPIMethod suitable for the chain hard fork version.
+func (c *Config) GetMinimizedPayloadVersion(timestamp uint64) eth.EngineAPIMethod {
+	if c.IsEcotone(timestamp) {
+		// Cancun
+		return eth.GetMinimizedPayloadV3
 	} else {
 		return eth.GetPayloadV2
 	}
