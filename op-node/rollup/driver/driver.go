@@ -172,9 +172,8 @@ func NewDriver(
 	var drain func() error
 	// This instantiation will be one of more options: soon there will be a parallel events executor
 	{
-		s := event.NewGlobalSynchronous(driverCtx)
-		executor = s
-		drain = s.Drain
+		executor = event.NewParallelExec()
+		drain = func() error { return nil } // no-op
 	}
 	sys := event.NewSystem(log, executor)
 	sys.AddTracer(event.NewMetricsTracer(metrics))

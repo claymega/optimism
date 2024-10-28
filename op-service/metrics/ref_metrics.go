@@ -2,6 +2,7 @@ package metrics
 
 import (
 	"encoding/binary"
+	"sync"
 	"time"
 
 	"github.com/ethereum-optimism/optimism/op-service/eth"
@@ -28,7 +29,7 @@ type RefMetrics struct {
 	RefsLatency *prometheus.GaugeVec
 	// hash of the last seen block per name, so we don't reduce/increase latency on updates of the same data,
 	// and only count the first occurrence
-	LatencySeen map[string]common.Hash
+	LatencySeen sync.Map
 }
 
 var _ RefMetricer = (*RefMetrics)(nil)
@@ -80,7 +81,6 @@ func MakeRefMetrics(ns string, factory Factory) RefMetrics {
 			"layer",
 			"type",
 		}),
-		LatencySeen: make(map[string]common.Hash),
 	}
 }
 
@@ -89,8 +89,9 @@ func (m *RefMetrics) RecordRef(layer string, name string, num uint64, timestamp 
 	if timestamp != 0 {
 		m.RefsTime.WithLabelValues(layer, name).Set(float64(timestamp))
 		// only meter the latency when we first see this hash for the given label name
-		if m.LatencySeen[name] != h {
-			m.LatencySeen[name] = h
+		value, ok := m.LatencySeen.Load(name)
+		if ok && value != h {
+			m.LatencySeen.Store(name, h)
 			m.RefsLatency.WithLabelValues(layer, name).Set(float64(timestamp) - (float64(time.Now().UnixNano()) / 1e9))
 		}
 	}

@@ -199,6 +199,8 @@ func (s *Driver) eventLoop() {
 	defer altSyncTicker.Stop()
 	lastUnsafeL2 := s.Engine.UnsafeL2Head()
 
+	var currentNextDelayedStep <-chan time.Time = nil
+
 	for {
 		if s.driverCtx.Err() != nil { // don't try to schedule/handle more work when we are closing.
 			return
@@ -227,6 +229,7 @@ func (s *Driver) eventLoop() {
 		select {
 		case <-sequencerCh:
 			s.Emitter.Emit(sequencing.SequencerActionEvent{})
+		case <-s.sequencer.CheckNextAction():
 		case <-altSyncTicker.C:
 			// Check if there is a gap in the current unsafe payload queue.
 			ctx, cancel := context.WithTimeout(s.driverCtx, time.Second*2)
@@ -265,7 +268,9 @@ func (s *Driver) eventLoop() {
 		case newL1Finalized := <-s.l1FinalizedSig:
 			s.emitter.Emit(finality.FinalizeL1Event{FinalizedL1: newL1Finalized})
 			reqStep() // we may be able to mark more L2 data as finalized now
-		case <-s.sched.NextDelayedStep():
+		case req := <-s.sched.UpdateDelayedStepReq:
+			currentNextDelayedStep = req
+		case <-currentNextDelayedStep:
 			s.emitter.Emit(StepAttemptEvent{})
 		case <-s.sched.NextStep():
 			s.emitter.Emit(StepAttemptEvent{})

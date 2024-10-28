@@ -1,10 +1,11 @@
 package status
 
 import (
+	"context"
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/log"
 	"sync"
 	"sync/atomic"
-
-	"github.com/ethereum/go-ethereum/log"
 
 	"github.com/ethereum-optimism/optimism/op-node/rollup"
 	"github.com/ethereum-optimism/optimism/op-node/rollup/derive"
@@ -33,6 +34,10 @@ func (ev L1SafeEvent) String() string {
 type Metrics interface {
 	RecordL1ReorgDepth(d uint64)
 	RecordL1Ref(name string, ref eth.L1BlockRef)
+}
+
+type L2 interface {
+	PayloadByHash(context.Context, common.Hash) (*eth.ExecutionPayloadEnvelope, error)
 }
 
 type StatusTracker struct {

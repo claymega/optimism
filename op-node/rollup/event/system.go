@@ -53,7 +53,7 @@ type systemActor struct {
 	leaveExecutor func()
 
 	// 0 if event does not originate from Deriver-handling of another event
-	currentEvent uint64
+	currentEvent atomic.Uint64
 }
 
 // Emit is called by the end-user
@@ -61,7 +61,7 @@ func (r *systemActor) Emit(ev Event) {
 	if r.ctx.Err() != nil {
 		return
 	}
-	r.sys.emit(r.name, r.currentEvent, ev)
+	r.sys.emit(r.name, r.currentEvent.Load(), ev)
 }
 
 // RunEvent is called by the events executor.
@@ -74,13 +74,13 @@ func (r *systemActor) RunEvent(ev AnnotatedEvent) {
 		return
 	}
 
-	prev := r.currentEvent
+	prev := r.currentEvent.Load()
 	start := time.Now()
-	r.currentEvent = r.sys.recordDerivStart(r.name, ev, start)
+	r.currentEvent.Store(r.sys.recordDerivStart(r.name, ev, start))
 	effect := r.deriv.OnEvent(ev.Event)
 	elapsed := time.Since(start)
-	r.sys.recordDerivEnd(r.name, ev, r.currentEvent, start, elapsed, effect)
-	r.currentEvent = prev
+	r.sys.recordDerivEnd(r.name, ev, r.currentEvent.Load(), start, elapsed, effect)
+	r.currentEvent.Store(prev)
 }
 
 // Sys is the canonical implementation of System.
@@ -130,7 +130,7 @@ func (s *Sys) Register(name string, deriver Deriver, opts *RegisterOpts) Emitter
 	if opts.Emitter.Limiting {
 		limitedCallback := opts.Emitter.OnLimited
 		em = NewLimiter(ctx, r, opts.Emitter.Rate, opts.Emitter.Burst, func() {
-			r.sys.recordRateLimited(name, r.currentEvent)
+			r.sys.recordRateLimited(name, r.currentEvent.Load())
 			if limitedCallback != nil {
 				limitedCallback()
 			}
