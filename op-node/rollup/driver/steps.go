@@ -62,7 +62,8 @@ type StepSchedulingDeriver struct {
 	bOffStrategy retry.Strategy
 
 	// channel, nil by default (not firing), but used to schedule re-attempts with delay
-	delayedStepReq <-chan time.Time
+	delayedStepReq       <-chan time.Time
+	UpdateDelayedStepReq chan (<-chan time.Time)
 
 	// stepReqCh is used to request that the driver attempts to step forward by one L1 block.
 	stepReqCh chan struct{}
@@ -74,11 +75,12 @@ type StepSchedulingDeriver struct {
 
 func NewStepSchedulingDeriver(log log.Logger) *StepSchedulingDeriver {
 	return &StepSchedulingDeriver{
-		stepAttempts:   0,
-		bOffStrategy:   retry.Exponential(),
-		stepReqCh:      make(chan struct{}, 1),
-		delayedStepReq: nil,
-		log:            log,
+		stepAttempts:         0,
+		bOffStrategy:         retry.Exponential(),
+		stepReqCh:            make(chan struct{}, 1),
+		delayedStepReq:       nil,
+		log:                  log,
+		UpdateDelayedStepReq: make(chan (<-chan time.Time), 1),
 	}
 }
 
@@ -103,6 +105,11 @@ func (s *StepSchedulingDeriver) OnEvent(ev event.Event) bool {
 	step := func() {
 		s.delayedStepReq = nil
 		select {
+		case s.UpdateDelayedStepReq <- s.delayedStepReq:
+		default:
+		}
+
+		select {
 		case s.stepReqCh <- struct{}{}:
 		// Don't deadlock if the channel is already full
 		default:
@@ -113,6 +120,10 @@ func (s *StepSchedulingDeriver) OnEvent(ev event.Event) bool {
 	case StepDelayedReqEvent:
 		if s.delayedStepReq == nil {
 			s.delayedStepReq = time.After(x.Delay)
+			select {
+			case s.UpdateDelayedStepReq <- s.delayedStepReq:
+			default:
+			}
 		}
 	case StepReqEvent:
 		if x.ResetBackoff {
@@ -124,6 +135,10 @@ func (s *StepSchedulingDeriver) OnEvent(ev event.Event) bool {
 				delay := s.bOffStrategy.Duration(s.stepAttempts)
 				s.log.Debug("scheduling re-attempt with delay", "attempts", s.stepAttempts, "delay", delay)
 				s.delayedStepReq = time.After(delay)
+				select {
+				case s.UpdateDelayedStepReq <- s.delayedStepReq:
+				default:
+				}
 			} else {
 				s.log.Debug("ignoring step request, already scheduled re-attempt after previous failure", "attempts", s.stepAttempts)
 			}
@@ -133,6 +148,10 @@ func (s *StepSchedulingDeriver) OnEvent(ev event.Event) bool {
 	case StepAttemptEvent:
 		// clear the delayed-step channel
 		s.delayedStepReq = nil
+		select {
+		case s.UpdateDelayedStepReq <- s.delayedStepReq:
+		default:
+		}
 		if s.stepAttempts > 0 {
 			s.log.Debug("Running step retry", "attempts", s.stepAttempts)
 		}
