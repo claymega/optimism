@@ -110,6 +110,7 @@ type Sequencer struct {
 	// nextAction is when the next sequencing action should be performed
 	nextAction   time.Time
 	nextActionOK bool
+	nextActionCh chan struct{}
 
 	latest       BuildingState
 	latestSealed eth.L2BlockRef
@@ -143,6 +144,7 @@ func NewSequencer(driverCtx context.Context, log log.Logger, rollupCfg *rollup.C
 		metrics:          metrics,
 		timeNow:          time.Now,
 		toBlockRef:       derive.PayloadToBlockRef,
+		nextActionCh:     make(chan struct{}, 1),
 	}
 }
 
@@ -232,6 +234,14 @@ func (d *Sequencer) onBuildStarted(x engine.BuildStartedEvent) {
 		// finish with margin of sealing duration before payloadTime
 		d.nextAction = payloadTime.Add(-sealingDuration)
 	}
+	select {
+	case d.nextActionCh <- struct{}{}:
+	default:
+	}
+}
+
+func (d *Sequencer) CheckNextAction() <-chan struct{} {
+	return d.nextActionCh
 }
 
 func (d *Sequencer) handleInvalid() {
@@ -242,6 +252,10 @@ func (d *Sequencer) handleInvalid() {
 	blockTime := time.Duration(d.rollupCfg.BlockTime) * time.Second
 	d.nextAction = d.timeNow().Add(blockTime)
 	d.nextActionOK = d.active.Load()
+	select {
+	case d.nextActionCh <- struct{}{}:
+	default:
+	}
 }
 
 func (d *Sequencer) onInvalidPayloadAttributes(x engine.InvalidPayloadAttributesEvent) {
@@ -395,6 +409,10 @@ func (d *Sequencer) onEngineTemporaryError(x rollup.EngineTemporaryErrorEvent) {
 		d.nextAction = d.timeNow().Add(time.Second)
 	}
 	d.nextActionOK = d.active.Load()
+	select {
+	case d.nextActionCh <- struct{}{}:
+	default:
+	}
 	// We don't explicitly cancel block building jobs upon temporary errors: we may still finish the block (if any).
 	// Any unfinished block building work eventually times out, and will be cleaned up that way.
 	// Note that this only applies to temporary errors upon starting a block-building job.
@@ -425,6 +443,10 @@ func (d *Sequencer) onEngineResetConfirmedEvent(x engine.EngineResetConfirmedEve
 	// assuming the execution-engine just churned through some work for the reset.
 	// This will also prevent any potential reset-loop from running too hot.
 	d.nextAction = d.timeNow().Add(time.Second * time.Duration(d.rollupCfg.BlockTime))
+	select {
+	case d.nextActionCh <- struct{}{}:
+	default:
+	}
 	d.log.Info("Engine reset confirmed, sequencer may continue", "next", d.nextActionOK)
 }
 
@@ -461,6 +483,10 @@ func (d *Sequencer) onForkchoiceUpdate(x engine.ForkchoiceUpdateEvent) {
 		} else {
 			// otherwise start instantly
 			d.nextAction = now
+		}
+		select {
+		case d.nextActionCh <- struct{}{}:
+		default:
 		}
 	}
 	d.setLatestHead(x.UnsafeL2Head)
@@ -656,6 +682,10 @@ func (d *Sequencer) forceStart() error {
 	d.latest = BuildingState{}
 	d.nextActionOK = true
 	d.nextAction = d.timeNow()
+	select {
+	case d.nextActionCh <- struct{}{}:
+	default:
+	}
 	d.active.Store(true)
 	d.log.Info("Sequencer has been started", "next action", d.nextAction)
 	return nil

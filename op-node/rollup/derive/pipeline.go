@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"sync/atomic"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/log"
@@ -58,7 +59,7 @@ type DerivationPipeline struct {
 
 	// Index of the stage that is currently being reset.
 	// >= len(stages) if no additional resetting is required
-	resetting int
+	resetting atomic.Int32
 	stages    []ResettableStage
 
 	// Special stages to keep track of
@@ -70,7 +71,8 @@ type DerivationPipeline struct {
 	origin         eth.L1BlockRef
 	resetL2Safe    eth.L2BlockRef
 	resetSysConfig eth.SystemConfig
-	engineIsReset  bool
+	// Its value is only 1 or 0
+	engineIsReset atomic.Bool
 
 	metrics Metrics
 }
@@ -100,7 +102,6 @@ func NewDerivationPipeline(log log.Logger, rollupCfg *rollup.Config, l1Fetcher L
 		rollupCfg: rollupCfg,
 		l1Fetcher: l1Fetcher,
 		altDA:     altDA,
-		resetting: 0,
 		stages:    stages,
 		metrics:   metrics,
 		traversal: l1Traversal,
@@ -112,14 +113,14 @@ func NewDerivationPipeline(log log.Logger, rollupCfg *rollup.Config, l1Fetcher L
 // DerivationReady returns true if the derivation pipeline is ready to be used.
 // When it's being reset its state is inconsistent, and should not be used externally.
 func (dp *DerivationPipeline) DerivationReady() bool {
-	return dp.engineIsReset && dp.resetting > 0
+	return dp.engineIsReset.Load() && dp.resetting.Load() > 0
 }
 
 func (dp *DerivationPipeline) Reset() {
-	dp.resetting = 0
+	dp.resetting.Store(0)
 	dp.resetSysConfig = eth.SystemConfig{}
 	dp.resetL2Safe = eth.L2BlockRef{}
-	dp.engineIsReset = false
+	dp.engineIsReset.Store(false)
 }
 
 // Origin is the L1 block of the inner-most stage of the derivation pipeline,
@@ -145,8 +146,8 @@ func (dp *DerivationPipeline) Step(ctx context.Context, pendingSafeHead eth.L2Bl
 	}()
 
 	// if any stages need to be reset, do that first.
-	if dp.resetting < len(dp.stages) {
-		if !dp.engineIsReset {
+	if dp.resetting.Load() < int32(len(dp.stages)) {
+		if !dp.engineIsReset.Load() {
 			return nil, NewResetError(errors.New("cannot continue derivation until Engine has been reset"))
 		}
 
@@ -159,12 +160,13 @@ func (dp *DerivationPipeline) Step(ctx context.Context, pendingSafeHead eth.L2Bl
 			}
 		}
 
-		if err := dp.stages[dp.resetting].Reset(ctx, dp.origin, dp.resetSysConfig); err == io.EOF {
-			dp.log.Debug("reset of stage completed", "stage", dp.resetting, "origin", dp.origin)
-			dp.resetting += 1
+		resetting := dp.resetting.Load()
+		if err := dp.stages[resetting].Reset(ctx, dp.origin, dp.resetSysConfig); err == io.EOF {
+			dp.log.Debug("reset of stage completed", "stage", resetting, "origin", dp.origin)
+			dp.resetting.Add(1)
 			return nil, nil
 		} else if err != nil {
-			return nil, fmt.Errorf("stage %d failed resetting: %w", dp.resetting, err)
+			return nil, fmt.Errorf("stage %d failed resetting: %w", dp.resetting.Load(), err)
 		} else {
 			return nil, nil
 		}
@@ -239,5 +241,5 @@ func (dp *DerivationPipeline) initialReset(ctx context.Context, resetL2Safe eth.
 }
 
 func (dp *DerivationPipeline) ConfirmEngineReset() {
-	dp.engineIsReset = true
+	dp.engineIsReset.Store(true)
 }
