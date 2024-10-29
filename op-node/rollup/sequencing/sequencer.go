@@ -276,7 +276,7 @@ func (d *Sequencer) onBuildSealed(x engine.BuildSealedEvent) {
 		"txs", len(x.Envelope.ExecutionPayload.Transactions),
 		"time", uint64(x.Envelope.ExecutionPayload.Timestamp))
 
-	//TODO(silas): CommitUnsafePayload
+	//TODO: Use GetPayload instead of GetMinimizedPayload if we need to commit an unsafe payload to other conductors.
 	// generous timeout, the conductor is important
 	// ctx, cancel := context.WithTimeout(d.ctx, time.Second*30)
 	// defer cancel()
@@ -286,7 +286,6 @@ func (d *Sequencer) onBuildSealed(x engine.BuildSealedEvent) {
 	// 	return
 	// }
 
-	//TODO(silas): start gossip
 	// begin gossiping as soon as possible
 	// asyncGossip.Clear() will be called later if an non-temporary error is found,
 	// or if the payload is successfully inserted
