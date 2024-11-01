@@ -48,6 +48,14 @@ func (p *ParallelExec) Enqueue(ev AnnotatedEvent) error {
 	return nil
 }
 
+func (p *ParallelExec) Drain() error {
+	return nil
+}
+
+func (p *ParallelExec) DrainUntil(fn func(ev Event) bool, excl bool) error {
+	return nil
+}
+
 type worker struct {
 	// ctx signals when the worker is exiting.
 	// No additional events will be accepted after cancellation.
