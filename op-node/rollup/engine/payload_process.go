@@ -3,6 +3,7 @@ package engine
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/ethereum-optimism/optimism/op-node/rollup"
 	"github.com/ethereum-optimism/optimism/op-service/eth"
@@ -28,8 +29,10 @@ func (eq *EngDeriver) onPayloadProcess(ev PayloadProcessEvent) {
 	ctx, cancel := context.WithTimeout(eq.ctx, payloadProcessTimeout)
 	defer cancel()
 	eq.log.Debug("payload-process, NewPayloadWithPayloadId, payload info:", "info", ev.Info)
+	eq.log.Info("MEGAETH", "step", "NewPayload_started", "time", time.Now().UnixMicro())
 	status, err := eq.ec.engine.NewPayloadWithPayloadId(ctx,
 		ev.Info, ev.Envelope.ParentBeaconBlockRoot)
+	eq.log.Info("MEGAETH", "step", "NewPayload_ended", "time", time.Now().UnixMicro())
 	if err != nil {
 		eq.emitter.Emit(rollup.EngineTemporaryErrorEvent{
 			Err: fmt.Errorf("failed to insert execution payload: %w", err)})

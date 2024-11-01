@@ -40,7 +40,9 @@ func (eq *EngDeriver) onBuildStart(ev BuildStartEvent) {
 		FinalizedBlockHash: fcEvent.FinalizedL2Head.Hash,
 	}
 	buildStartTime := time.Now()
+	eq.log.Info("MEGAETH", "step", "startPayload_started", "time", time.Now().UnixMicro())
 	id, errTyp, err := startPayload(ctx, eq.ec.engine, fc, ev.Attributes.Attributes)
+	eq.log.Info("MEGAETH", "step", "startPayload_ended", "time", time.Now().UnixMicro())
 	if err != nil {
 		switch errTyp {
 		case BlockInsertTemporaryErr:

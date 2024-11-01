@@ -1,10 +1,13 @@
 package status
 
 import (
+	"context"
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/log"
+	"strconv"
 	"sync"
 	"sync/atomic"
-
-	"github.com/ethereum/go-ethereum/log"
+	"time"
 
 	"github.com/ethereum-optimism/optimism/op-node/rollup"
 	"github.com/ethereum-optimism/optimism/op-node/rollup/derive"
@@ -35,6 +38,10 @@ type Metrics interface {
 	RecordL1Ref(name string, ref eth.L1BlockRef)
 }
 
+type L2 interface {
+	PayloadByHash(context.Context, common.Hash) (*eth.ExecutionPayloadEnvelope, error)
+}
+
 type StatusTracker struct {
 	data eth.SyncStatus
 
@@ -45,17 +52,26 @@ type StatusTracker struct {
 	metrics Metrics
 
 	mu sync.RWMutex
+
+	l2 L2
 }
 
-func NewStatusTracker(log log.Logger, metrics Metrics) *StatusTracker {
+func NewStatusTracker(log log.Logger, metrics Metrics, l2 L2) *StatusTracker {
 	st := &StatusTracker{
 		log:     log,
 		metrics: metrics,
+		l2:      l2,
 	}
 	st.data = eth.SyncStatus{}
 	st.published.Store(&eth.SyncStatus{})
 	return st
 }
+
+var startAt = time.Now()
+var previousBlockAt = time.Now()
+var totalTxs = uint64(0)
+var numBlocks = uint64(0)
+var lastBlock = uint64(0)
 
 func (st *StatusTracker) OnEvent(ev event.Event) bool {
 	st.mu.Lock()
@@ -63,6 +79,40 @@ func (st *StatusTracker) OnEvent(ev event.Event) bool {
 
 	switch x := ev.(type) {
 	case engine.ForkchoiceUpdateEvent:
+		if x.UnsafeL2Head.Number > lastBlock {
+			st.log.Info("MEGAETH", "step", "end", "currentBlock", x.UnsafeL2Head.Number, "time", time.Now().UnixMicro())
+			lastBlock = x.UnsafeL2Head.Number
+			numBlocks += 1
+			now := time.Now()
+			totalElapse := time.Since(startAt).Seconds()
+			elapse := time.Now().Sub(previousBlockAt).Seconds()
+			previousBlockAt = time.Now()
+
+			for {
+				block, err := st.l2.PayloadByHash(context.Background(), x.UnsafeL2Head.Hash)
+				if err != nil {
+					st.log.Error("fcu statistics error", "l2-block", x.UnsafeL2Head)
+					break
+				}
+				txsLen := uint64(len(block.ExecutionPayload.Transactions))
+				totalTxs += txsLen
+
+				blockInterval := elapse
+				averageTPS := float64(totalTxs) / totalElapse
+				blockTxs := float64(txsLen)
+				sql := `insert into status_tracker(create_time, block_number, block_interval, average_tps, block_txs, total_txs, metric) values('` +
+					now.Format("2006-01-02 15:04:05.000000") + `', '` +
+					strconv.Itoa(int(x.UnsafeL2Head.Number)) + `', '` +
+					strconv.FormatFloat(blockInterval, 'f', 6, 64) + `', '` +
+					strconv.FormatFloat(averageTPS, 'f', 6, 64) + `', '` +
+					strconv.FormatFloat(blockTxs, 'f', 6, 64) + `', '` +
+					strconv.FormatFloat(float64(totalTxs), 'f', 6, 64) + `', '` +
+					"default" +
+					`')`
+				st.log.Info("MEGAETH", "sql", sql)
+				break
+			}
+		}
 		st.data.UnsafeL2 = x.UnsafeL2Head
 		st.data.SafeL2 = x.SafeL2Head
 		st.data.FinalizedL2 = x.FinalizedL2Head
