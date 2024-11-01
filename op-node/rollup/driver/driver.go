@@ -180,7 +180,7 @@ func NewDriver(
 
 	opts := event.DefaultRegisterOpts()
 
-	statusTracker := status.NewStatusTracker(log, metrics)
+	statusTracker := status.NewStatusTracker(log, metrics, l2)
 	sys.Register("status", statusTracker, opts)
 
 	l1Tracker := status.NewL1Tracker(l1)

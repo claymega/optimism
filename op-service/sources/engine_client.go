@@ -3,6 +3,7 @@ package sources
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -81,6 +82,7 @@ func (s *EngineAPIClient) EngineVersionProvider() EngineVersionProvider { return
 // 2. `error` as eth.InputError: the forkchoice state or attributes are not valid.
 // 3. Other types of `error`: temporary RPC errors, like timeouts.
 func (s *EngineAPIClient) ForkchoiceUpdate(ctx context.Context, fc *eth.ForkchoiceState, attributes *eth.PayloadAttributes) (*eth.ForkchoiceUpdatedResult, error) {
+	now := time.Now()
 	llog := s.log.New("state", fc)       // local logger
 	tlog := llog.New("attr", attributes) // trace logger
 	tlog.Trace("Sharing forkchoice-updated signal")
@@ -93,6 +95,15 @@ func (s *EngineAPIClient) ForkchoiceUpdate(ctx context.Context, fc *eth.Forkchoi
 		tlog.Trace("Shared forkchoice-updated signal")
 		if attributes != nil { // block building is optional, we only get a payload ID if we are building a block
 			tlog.Trace("Received payload id", "payloadId", result.PayloadID)
+		}
+		{
+			elapse := time.Since(now).Milliseconds()
+			sql := `insert into fcu(create_time, duration, metric) values('` +
+				now.Format("2006-01-02 15:04:05.000000") + `', '` +
+				strconv.FormatInt(elapse, 10) + `', '` +
+				"default" +
+				`')`
+			s.log.Info("MEGAETH", "sql", sql)
 		}
 		return &result, nil
 	} else {
@@ -117,6 +128,7 @@ func (s *EngineAPIClient) ForkchoiceUpdate(ctx context.Context, fc *eth.Forkchoi
 // This returns a PayloadStatusV1 which encodes any validation/processing error,
 // and this type of error is kept separate from the returned `error` used for RPC errors, like timeouts.
 func (s *EngineAPIClient) NewPayload(ctx context.Context, payload *eth.ExecutionPayload, parentBeaconBlockRoot *common.Hash) (*eth.PayloadStatusV1, error) {
+	now := time.Now()
 	e := s.log.New("block_hash", payload.BlockHash)
 	e.Trace("sending payload for execution")
 
@@ -139,6 +151,15 @@ func (s *EngineAPIClient) NewPayload(ctx context.Context, payload *eth.Execution
 		e.Error("Payload execution failed", "err", err)
 		return nil, fmt.Errorf("failed to execute payload: %w", err)
 	}
+	{
+		elapse := time.Since(now).Milliseconds()
+		sql := `insert into new_payload(create_time, duration, metric) values('` +
+			now.Format("2006-01-02 15:04:05.000000") + `', '` +
+			strconv.FormatInt(elapse, 10) + `', '` +
+			"default" +
+			`')`
+		s.log.Info("MEGAETH", "sql", sql)
+	}
 	return &result, nil
 }
 
@@ -147,6 +168,7 @@ func (s *EngineAPIClient) NewPayload(ctx context.Context, payload *eth.Execution
 // 1. `error` as eth.InputError: the payload ID may be unknown
 // 2. Other types of `error`: temporary RPC errors, like timeouts.
 func (s *EngineAPIClient) GetPayload(ctx context.Context, payloadInfo eth.PayloadInfo) (*eth.ExecutionPayloadEnvelope, error) {
+	now := time.Now()
 	e := s.log.New("payload_id", payloadInfo.ID)
 	e.Trace("getting payload")
 	var result eth.ExecutionPayloadEnvelope
@@ -168,6 +190,14 @@ func (s *EngineAPIClient) GetPayload(ctx context.Context, payloadInfo eth.Payloa
 		}
 		return nil, err
 	}
+	elapse := time.Since(now).Milliseconds()
+	sql := `insert into get_payload(create_time, payload_id, duration, metric) values('` +
+		now.Format("2006-01-02 15:04:05.000000") + `', '` +
+		payloadInfo.ID.String() + `', '` +
+		strconv.FormatInt(elapse, 10) + `', '` +
+		"default" +
+		`')`
+	s.log.Info("MEGAETH", "sql", sql)
 	e.Trace("Received payload")
 	return &result, nil
 }

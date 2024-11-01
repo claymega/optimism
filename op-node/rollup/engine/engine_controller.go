@@ -241,7 +241,9 @@ func (e *EngineController) TryUpdateEngine(ctx context.Context) error {
 	}
 	logFn := e.logSyncProgressMaybe()
 	defer logFn()
+	e.log.Info("MEGAETH", "step", "ForkchoiceUpdate_started", "time", time.Now().UnixMicro())
 	fcRes, err := e.engine.ForkchoiceUpdate(ctx, &fc, nil)
+	e.log.Info("MEGAETH", "step", "ForkchoiceUpdate_ended", "time", time.Now().UnixMicro())
 	if err != nil {
 		var inputErr eth.InputError
 		if errors.As(err, &inputErr) {

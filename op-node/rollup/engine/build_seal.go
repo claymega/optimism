@@ -56,7 +56,9 @@ func (eq *EngDeriver) onBuildSeal(ev BuildSealEvent) {
 	defer cancel()
 
 	sealingStart := time.Now()
+	eq.log.Info("MEGAETH", "step", "GetPayload_started", "time", time.Now().UnixMicro())
 	envelope, err := eq.ec.engine.GetPayload(ctx, ev.Info)
+	eq.log.Info("MEGAETH", "step", "GetPayload_ended", "time", time.Now().UnixMicro())
 	if err != nil {
 		if x, ok := err.(eth.InputError); ok && x.Code == eth.UnknownPayload { //nolint:all
 			eq.log.Warn("Cannot seal block, payload ID is unknown",

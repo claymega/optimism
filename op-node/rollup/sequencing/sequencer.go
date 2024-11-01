@@ -513,12 +513,15 @@ func (d *Sequencer) startBuildingBlock() {
 		return
 	}
 
+	d.log.Info("MEGAETH", "step", "start", "parent", l2Head.Number, "time", time.Now().UnixMicro())
 	d.log.Info("Started sequencing new block", "parent", l2Head, "l1Origin", l1Origin)
 
 	fetchCtx, cancel := context.WithTimeout(ctx, time.Second*20)
 	defer cancel()
 
+	d.log.Info("MEGAETH", "step", "PreparePayloadAttributes_started", "time", time.Now().UnixMicro())
 	attrs, err := d.attrBuilder.PreparePayloadAttributes(fetchCtx, l2Head, l1Origin.ID())
+	d.log.Info("MEGAETH", "step", "PreparePayloadAttributes_ended", "time", time.Now().UnixMicro())
 	if err != nil {
 		if errors.Is(err, derive.ErrTemporary) {
 			d.emitter.Emit(rollup.EngineTemporaryErrorEvent{Err: err})
