@@ -89,8 +89,12 @@ func (s *EngineAPIClient) ForkchoiceUpdate(ctx context.Context, fc *eth.Forkchoi
 	fcCtx, cancel := context.WithTimeout(ctx, time.Second*5)
 	defer cancel()
 	var result eth.ForkchoiceUpdatedResult
+	s.log.Info("MEGAETH", "step", "ForkchoiceUpdatedVersion_started", "time", time.Now().UnixMicro())
 	method := s.evp.ForkchoiceUpdatedVersion(attributes)
+	s.log.Info("MEGAETH", "step", "ForkchoiceUpdatedVersion_ended", "time", time.Now().UnixMicro())
+	s.log.Info("MEGAETH", "step", "CallContext_started", "time", time.Now().UnixMicro())
 	err := s.RPC.CallContext(fcCtx, &result, string(method), fc, attributes)
+	s.log.Info("MEGAETH", "step", "CallContext_ended", "time", time.Now().UnixMicro())
 	if err == nil {
 		tlog.Trace("Shared forkchoice-updated signal")
 		if attributes != nil { // block building is optional, we only get a payload ID if we are building a block
