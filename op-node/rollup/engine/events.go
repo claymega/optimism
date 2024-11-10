@@ -256,7 +256,7 @@ func (d *EngDeriver) OnEvent(ev event.Event) bool {
 			d.emitter.Emit(SafeDerivedEvent{Safe: x.Ref, DerivedFrom: x.DerivedFrom})
 			// Try to apply the forkchoice changes
 			fmt.Println("debugA2")
-			d.emitter.Emit(TryUpdateEngineEvent{})
+			//d.emitter.Emit(TryUpdateEngineEvent{})
 		}
 	case PromoteFinalizedEvent:
 		if x.Ref.Number < d.ec.Finalized().Number {
