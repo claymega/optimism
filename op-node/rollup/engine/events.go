@@ -161,6 +161,7 @@ func (d *EngDeriver) AttachEmitter(em event.Emitter) {
 }
 
 func (d *EngDeriver) OnEvent(ev event.Event) bool {
+	fmt.Println("debug00, ev", ev.String())
 	switch x := ev.(type) {
 	case TryBackupUnsafeReorgEvent:
 		// If we don't need to call FCU to restore unsafeHead using backupUnsafe, keep going b/c
@@ -228,6 +229,7 @@ func (d *EngDeriver) OnEvent(ev event.Event) bool {
 		ForceEngineReset(d.ec, x)
 
 		// Time to apply the changes to the underlying engine
+		fmt.Println("debugA1")
 		d.emitter.Emit(TryUpdateEngineEvent{})
 
 		log.Debug("Reset of Engine is completed",
@@ -253,6 +255,7 @@ func (d *EngDeriver) OnEvent(ev event.Event) bool {
 			d.ec.SetSafeHead(x.Ref)
 			d.emitter.Emit(SafeDerivedEvent{Safe: x.Ref, DerivedFrom: x.DerivedFrom})
 			// Try to apply the forkchoice changes
+			fmt.Println("debugA2")
 			d.emitter.Emit(TryUpdateEngineEvent{})
 		}
 	case PromoteFinalizedEvent:
@@ -266,6 +269,7 @@ func (d *EngDeriver) OnEvent(ev event.Event) bool {
 		}
 		d.ec.SetFinalizedHead(x.Ref)
 		// Try to apply the forkchoice changes
+		fmt.Println("debugA3")
 		d.emitter.Emit(TryUpdateEngineEvent{})
 	case BuildStartEvent:
 		d.onBuildStart(x)
@@ -280,6 +284,7 @@ func (d *EngDeriver) OnEvent(ev event.Event) bool {
 	case BuildCancelEvent:
 		d.onBuildCancel(x)
 	case PayloadProcessEvent:
+		fmt.Println("debug01")
 		d.onPayloadProcess(x)
 	case PayloadSuccessEvent:
 		d.onPayloadSuccess(x)

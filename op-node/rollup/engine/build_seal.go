@@ -79,7 +79,9 @@ func (eq *EngDeriver) onBuildSeal(ev BuildSealEvent) {
 		return
 	}
 
+	eq.log.Info("MEGAETH", "step", "sanityCheckPayload_started", "time", time.Now().UnixMicro())
 	if err := sanityCheckPayload(envelope.ExecutionPayload); err != nil {
+		eq.log.Info("MEGAETH", "step", "sanityCheckPayload_ended", "time", time.Now().UnixMicro())
 		eq.emitter.Emit(PayloadSealInvalidEvent{
 			Info: ev.Info,
 			Err: fmt.Errorf("failed sanity-check of execution payload contents (ID: %s, blockhash: %s): %w",
@@ -89,8 +91,11 @@ func (eq *EngDeriver) onBuildSeal(ev BuildSealEvent) {
 		})
 		return
 	}
+	eq.log.Info("MEGAETH", "step", "sanityCheckPayload_ended", "time", time.Now().UnixMicro())
 
+	eq.log.Info("MEGAETH", "step", "PayloadToBlockRef_started", "time", time.Now().UnixMicro())
 	ref, err := derive.PayloadToBlockRef(eq.cfg, envelope.ExecutionPayload)
+	eq.log.Info("MEGAETH", "step", "PayloadToBlockRef_ended", "time", time.Now().UnixMicro())
 	if err != nil {
 		eq.emitter.Emit(PayloadSealInvalidEvent{
 			Info:         ev.Info,

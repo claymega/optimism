@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"fmt"
 	"github.com/ethereum-optimism/optimism/op-service/eth"
 )
 
@@ -45,5 +46,6 @@ func (eq *EngDeriver) onPayloadSuccess(ev PayloadSuccessEvent) {
 		"prev_randao", payload.PrevRandao, "fee_recipient", payload.FeeRecipient,
 		"txs", len(payload.Transactions), "last_in_span", ev.IsLastInSpan, "derived_from", ev.DerivedFrom)
 
+	fmt.Println("debugA0")
 	eq.emitter.Emit(TryUpdateEngineEvent{})
 }

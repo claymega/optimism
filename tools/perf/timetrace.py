@@ -19,6 +19,17 @@ with open('/home/clay/timetrace.log', 'r') as file:
   start_payload_ended = 0
   get_payload_started = 0
   get_payload_ended = 0
+
+  sanityCheckPayload_started = 0
+  sanityCheckPayload_ended = 0
+  PayloadToBlockRef_started = 0
+  PayloadToBlockRef_ended = 0
+  CommitUnsafePayload_started = 0
+  CommitUnsafePayload_ended = 0
+
+  PayloadProcessEvent_started = 0
+  PayloadProcessEvent_ended = 0
+
   new_payload_started = 0
   new_payload_ended = 0
   fcu_started = 0
@@ -43,7 +54,11 @@ with open('/home/clay/timetrace.log', 'r') as file:
               print(type(block_number))
               print(type(parent_number))
 
-            sql = "insert into time_trace(block_number, start_time, interval0, prepare_time, interval1, start_payload, interval2, get_payload, interval3, new_payload, interval4, fcu, interval5, interval6, end, metric)"
+            sql = "insert into time_trace(block_number, start_time, interval0, prepare_time, interval1, start_payload, " \
+            + "interval2, get_payload, interval3, new_payload, interval4, fcu, interval5, interval6, end, " \
+            + "interval10, sanityCheckPayload, interval11, PayloadToBlockRef, interval12, CommitUnsafePayload, interval13, " \
+            + "PayloadProcessEvent, " \
+            + "metric)"
             # f"INSERT INTO {table_name} (name, age) VALUES ('{name}', {age});"
             # start_time, interval0
             sql = sql + f"values({block_number}, {tmp}, {prepare_time_started - tmp}, "
@@ -71,6 +86,28 @@ with open('/home/clay/timetrace.log', 'r') as file:
             sql = sql + f"{start_time - end}, "
             # end
             sql = sql + f"{end}, "
+
+            #   sanityCheckPayload = 0
+            #   PayloadToBlockRef = 0
+            #   CommitUnsafePayload = 0
+            # interval10
+            sql = sql + f"{sanityCheckPayload_started - get_payload_ended}, "
+            # sanityCheckPayload
+            sql = sql + f"{sanityCheckPayload_ended - sanityCheckPayload_started}, "
+            # interval11
+            sql = sql + f"{PayloadToBlockRef_started - sanityCheckPayload_ended}, "
+            # PayloadToBlockRef
+            sql = sql + f"{PayloadToBlockRef_ended - PayloadToBlockRef_started}, "
+            # interval12
+            sql = sql + f"{CommitUnsafePayload_started - PayloadToBlockRef_ended}, "
+            # CommitUnsafePayload
+            sql = sql + f"{CommitUnsafePayload_ended - CommitUnsafePayload_started}, "
+            # interval13
+            sql = sql + f"{new_payload_started - CommitUnsafePayload_ended}, "
+            # PayloadProcessEvent
+            #sql = sql + f"{PayloadProcessEvent_ended - PayloadProcessEvent_started}, "
+            sql = sql + f"{new_payload_started - PayloadProcessEvent_ended}, "
+
             sql = sql + f"'metric');\n"
 
             prepare_time_started = 0
@@ -108,6 +145,22 @@ with open('/home/clay/timetrace.log', 'r') as file:
           fcu_started = int(kv["time"])
         case "ForkchoiceUpdate_ended":
           fcu_ended = int(kv["time"])
+        case "sanityCheckPayload_started":
+          sanityCheckPayload_started = int(kv["time"])
+        case "sanityCheckPayload_ended":
+          sanityCheckPayload_ended = int(kv["time"])
+        case "PayloadToBlockRef_started":
+          PayloadToBlockRef_started = int(kv["time"])
+        case "PayloadToBlockRef_ended":
+          PayloadToBlockRef_ended = int(kv["time"])
+        case "CommitUnsafePayload_started":
+          CommitUnsafePayload_started = int(kv["time"])
+        case "CommitUnsafePayload_ended":
+          CommitUnsafePayload_ended = int(kv["time"])
+        case "PayloadProcessEvent_started":
+          PayloadProcessEvent_started = int(kv["time"])
+        case "PayloadProcessEvent_ended":
+          PayloadProcessEvent_ended = int(kv["time"])
         case "end":
           end = int(kv["time"])
           block_number = int(kv["currentBlock"])

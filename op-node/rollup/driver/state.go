@@ -448,6 +448,7 @@ func (s *SyncDeriver) SyncStep() {
 		return
 	}
 
+	fmt.Println("debugA4")
 	s.Emitter.Emit(engine.TryUpdateEngineEvent{})
 	if !drain() {
 		return
