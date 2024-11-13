@@ -6,6 +6,7 @@ import (
 	"github.com/ethereum/go-ethereum/log"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/ethereum-optimism/optimism/op-node/rollup"
 	"github.com/ethereum-optimism/optimism/op-node/rollup/derive"
@@ -34,6 +35,7 @@ func (ev L1SafeEvent) String() string {
 type Metrics interface {
 	RecordL1ReorgDepth(d uint64)
 	RecordL1Ref(name string, ref eth.L1BlockRef)
+	RecordBlockDetail(blockInterval float64, averageTPS float64)
 }
 
 type L2 interface {
@@ -50,17 +52,26 @@ type StatusTracker struct {
 	metrics Metrics
 
 	mu sync.RWMutex
+
+	l2 L2
 }
 
-func NewStatusTracker(log log.Logger, metrics Metrics) *StatusTracker {
+func NewStatusTracker(log log.Logger, metrics Metrics, l2 L2) *StatusTracker {
 	st := &StatusTracker{
 		log:     log,
 		metrics: metrics,
+		l2:      l2,
 	}
 	st.data = eth.SyncStatus{}
 	st.published.Store(&eth.SyncStatus{})
 	return st
 }
+
+var startAt = time.Now()
+var previousBlockAt = time.Now()
+var totalTxs = uint64(0)
+var numBlocks = uint64(0)
+var lastBlock = uint64(0)
 
 func (st *StatusTracker) OnEvent(ev event.Event) bool {
 	st.mu.Lock()
@@ -68,6 +79,28 @@ func (st *StatusTracker) OnEvent(ev event.Event) bool {
 
 	switch x := ev.(type) {
 	case engine.ForkchoiceUpdateEvent:
+		if x.UnsafeL2Head.Number > lastBlock {
+			lastBlock = x.UnsafeL2Head.Number
+			numBlocks += 1
+			totalElapse := time.Since(startAt).Seconds()
+			elapse := time.Now().Sub(previousBlockAt).Seconds()
+			previousBlockAt = time.Now()
+
+			for {
+				block, err := st.l2.PayloadByHash(context.Background(), x.UnsafeL2Head.Hash)
+				if err != nil {
+					st.log.Error("fcu statistics error", "l2-block", x.UnsafeL2Head)
+					break
+				}
+				txsLen := uint64(len(block.ExecutionPayload.Transactions))
+				totalTxs += txsLen
+
+				blockInterval := elapse
+				averageTPS := float64(totalTxs) / totalElapse
+				st.metrics.RecordBlockDetail(blockInterval, averageTPS)
+				break
+			}
+		}
 		st.data.UnsafeL2 = x.UnsafeL2Head
 		st.data.SafeL2 = x.SafeL2Head
 		st.data.FinalizedL2 = x.FinalizedL2Head

@@ -51,6 +51,8 @@ type Metrics interface {
 
 	RecordL1ReorgDepth(d uint64)
 
+	RecordBlockDetail(blockInterval, averageTPS float64)
+
 	engine.Metrics
 	L1FetcherMetrics
 	event.Metrics
@@ -180,7 +182,7 @@ func NewDriver(
 
 	opts := event.DefaultRegisterOpts()
 
-	statusTracker := status.NewStatusTracker(log, metrics)
+	statusTracker := status.NewStatusTracker(log, metrics, l2)
 	sys.Register("status", statusTracker, opts)
 
 	l1Tracker := status.NewL1Tracker(l1)

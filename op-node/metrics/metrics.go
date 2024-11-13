@@ -75,6 +75,7 @@ type Metricer interface {
 	RecordDial(allow bool)
 	RecordAccept(allow bool)
 	ReportProtocolVersions(local, engine, recommended, required params.ProtocolVersion)
+	RecordBlockDetail(blockInterval float64, averageTPS float64)
 }
 
 // Metrics tracks all the metrics for the op-node.
@@ -152,6 +153,8 @@ type Metrics struct {
 	Dials             *prometheus.CounterVec
 	Accepts           *prometheus.CounterVec
 	PeerScores        *prometheus.HistogramVec
+	BlockInterval     prometheus.Gauge
+	AverageTPS        prometheus.Gauge
 
 	ChannelInputBytes prometheus.Counter
 
@@ -265,6 +268,18 @@ func NewMetrics(procName string) *Metrics {
 			Namespace: ns,
 			Name:      "transactions_sequenced_total",
 			Help:      "Count of total transactions sequenced",
+		}),
+		BlockInterval: factory.NewGauge(prometheus.GaugeOpts{
+			Namespace: ns,
+			Subsystem: "p2p",
+			Name:      "block_interval",
+			Help:      "Count of currently connected p2p peers",
+		}),
+		AverageTPS: factory.NewGauge(prometheus.GaugeOpts{
+			Namespace: ns,
+			Subsystem: "p2p",
+			Name:      "average_tps",
+			Help:      "Count of currently connected p2p peers",
 		}),
 
 		PeerCount: factory.NewGauge(prometheus.GaugeOpts{
@@ -671,6 +686,12 @@ func (m *Metrics) ReportProtocolVersions(local, engine, recommended, required pa
 	m.ProtocolVersions.WithLabelValues(local.String(), engine.String(), recommended.String(), required.String()).Set(1)
 }
 
+func (m *Metrics) RecordBlockDetail(blockInterval float64, averageTPS float64) {
+	m.BlockInterval.Set(blockInterval)
+	m.AverageTPS.Set(averageTPS)
+
+}
+
 type noopMetricer struct {
 	metrics.NoopRPCMetrics
 }
@@ -801,4 +822,6 @@ func (n *noopMetricer) RecordDial(allow bool) {
 func (n *noopMetricer) RecordAccept(allow bool) {
 }
 func (n *noopMetricer) ReportProtocolVersions(local, engine, recommended, required params.ProtocolVersion) {
+}
+func (n *noopMetricer) RecordBlockDetail(blockInterval float64, averageTPS float64) {
 }
