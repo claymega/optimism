@@ -71,8 +71,7 @@ type DerivationPipeline struct {
 	origin         eth.L1BlockRef
 	resetL2Safe    eth.L2BlockRef
 	resetSysConfig eth.SystemConfig
-	// Its value is only 1 or 0
-	engineIsReset atomic.Bool
+	engineIsReset  atomic.Bool
 
 	metrics Metrics
 }
