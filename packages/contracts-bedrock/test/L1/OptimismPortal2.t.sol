@@ -1,34 +1,34 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.15;
 
-// Testing utilities
+// Testing
 import { stdError } from "forge-std/Test.sol";
 import { VmSafe } from "forge-std/Vm.sol";
-
+import { MockERC20 } from "solmate/test/utils/mocks/MockERC20.sol";
 import { CommonTest } from "test/setup/CommonTest.sol";
 import { NextImpl } from "test/mocks/NextImpl.sol";
 import { EIP1967Helper } from "test/mocks/EIP1967Helper.sol";
+
+// Contracts
+import { Proxy } from "src/universal/Proxy.sol";
+import { SuperchainConfig } from "src/L1/SuperchainConfig.sol";
 
 // Libraries
 import { Types } from "src/libraries/Types.sol";
 import { Hashing } from "src/libraries/Hashing.sol";
 import { Constants } from "src/libraries/Constants.sol";
 import { Predeploys } from "src/libraries/Predeploys.sol";
-
-// Target contract dependencies
-import { Proxy } from "src/universal/Proxy.sol";
-import { ResourceMetering } from "src/L1/ResourceMetering.sol";
-import { AddressAliasHelper } from "src/vendor/AddressAliasHelper.sol";
-import { SystemConfig } from "src/L1/SystemConfig.sol";
-import { L1Block } from "src/L2/L1Block.sol";
-import { SuperchainConfig } from "src/L1/SuperchainConfig.sol";
-import { OptimismPortal2 } from "src/L1/OptimismPortal2.sol";
 import { GasPayingToken } from "src/libraries/GasPayingToken.sol";
-import { MockERC20 } from "solmate/test/utils/mocks/MockERC20.sol";
-
-import { FaultDisputeGame, IDisputeGame } from "src/dispute/FaultDisputeGame.sol";
+import { AddressAliasHelper } from "src/vendor/AddressAliasHelper.sol";
 import "src/dispute/lib/Types.sol";
 import "src/libraries/PortalErrors.sol";
+
+// Interfaces
+import { IResourceMetering } from "src/L1/interfaces/IResourceMetering.sol";
+import { IL1Block } from "src/L2/interfaces/IL1Block.sol";
+import { IOptimismPortal2 } from "src/L1/interfaces/IOptimismPortal2.sol";
+import { IDisputeGame } from "src/dispute/interfaces/IDisputeGame.sol";
+import { IFaultDisputeGame } from "src/dispute/interfaces/IFaultDisputeGame.sol";
 
 contract OptimismPortal2_Test is CommonTest {
     address depositor;
@@ -50,7 +50,7 @@ contract OptimismPortal2_Test is CommonTest {
     /// @notice Marked virtual to be overridden in
     ///         test/kontrol/deployment/DeploymentSummary.t.sol
     function test_constructor_succeeds() external virtual {
-        OptimismPortal2 opImpl = OptimismPortal2(payable(deploy.mustGetAddress("OptimismPortal2")));
+        IOptimismPortal2 opImpl = IOptimismPortal2(payable(deploy.mustGetAddress("OptimismPortal2")));
         assertEq(address(opImpl.disputeGameFactory()), address(0));
         assertEq(address(opImpl.systemConfig()), address(0));
         assertEq(address(opImpl.superchainConfig()), address(0));
@@ -317,7 +317,7 @@ contract OptimismPortal2_Test is CommonTest {
                 uint256(0), // value
                 uint64(200_000), // gasLimit
                 false, // isCreation,
-                abi.encodeCall(L1Block.setGasPayingToken, (_token, _decimals, _name, _symbol))
+                abi.encodeCall(IL1Block.setGasPayingToken, (_token, _decimals, _name, _symbol))
             )
         );
 
@@ -352,7 +352,7 @@ contract OptimismPortal2_Test is CommonTest {
             _value: 0,
             _gasLimit: 200_000,
             _isCreation: false,
-            _data: abi.encodeCall(L1Block.setGasPayingToken, (_token, 18, name, symbol))
+            _data: abi.encodeCall(IL1Block.setGasPayingToken, (_token, 18, name, symbol))
         });
 
         VmSafe.Log[] memory logs = vm.getRecordedLogs();
@@ -424,7 +424,7 @@ contract OptimismPortal2_FinalizeWithdrawal_Test is CommonTest {
     // Reusable default values for a test withdrawal
     Types.WithdrawalTransaction _defaultTx;
 
-    FaultDisputeGame game;
+    IFaultDisputeGame game;
     uint256 _proposedGameIndex;
     uint256 _proposedBlockNumber;
     bytes32 _stateRoot;
@@ -463,7 +463,7 @@ contract OptimismPortal2_FinalizeWithdrawal_Test is CommonTest {
     /// @dev Setup the system for a ready-to-use state.
     function setUp() public virtual override {
         _proposedBlockNumber = 0xFF;
-        game = FaultDisputeGame(
+        game = IFaultDisputeGame(
             payable(
                 address(
                     disputeGameFactory.create(
@@ -1404,7 +1404,7 @@ contract OptimismPortal2_Upgradeable_Test is CommonTest {
     /// @dev Tests that the proxy is initialized correctly.
     function test_params_initValuesOnProxy_succeeds() external view {
         (uint128 prevBaseFee, uint64 prevBoughtGas, uint64 prevBlockNum) = optimismPortal2.params();
-        ResourceMetering.ResourceConfig memory rcfg = systemConfig.resourceConfig();
+        IResourceMetering.ResourceConfig memory rcfg = systemConfig.resourceConfig();
 
         assertEq(prevBaseFee, rcfg.minimumBaseFee);
         assertEq(prevBoughtGas, 0);
@@ -1464,24 +1464,37 @@ contract OptimismPortal2_ResourceFuzz_Test is CommonTest {
     {
         // Get the set system gas limit
         uint64 gasLimit = systemConfig.gasLimit();
+
         // Bound resource config
         _maxResourceLimit = uint32(bound(_maxResourceLimit, 21000, MAX_GAS_LIMIT / 8));
         _gasLimit = uint64(bound(_gasLimit, 21000, _maxResourceLimit));
         _prevBaseFee = uint128(bound(_prevBaseFee, 0, 3 gwei));
+        _prevBoughtGas = uint64(bound(_prevBoughtGas, 0, _maxResourceLimit - _gasLimit));
+        _blockDiff = uint8(bound(_blockDiff, 0, 3));
+        _baseFeeMaxChangeDenominator = uint8(bound(_baseFeeMaxChangeDenominator, 2, type(uint8).max));
+        _elasticityMultiplier = uint8(bound(_elasticityMultiplier, 1, type(uint8).max));
+
         // Prevent values that would cause reverts
         vm.assume(gasLimit >= _gasLimit);
         vm.assume(_minimumBaseFee < _maximumBaseFee);
         vm.assume(_baseFeeMaxChangeDenominator > 1);
         vm.assume(uint256(_maxResourceLimit) + uint256(_systemTxMaxGas) <= gasLimit);
-        vm.assume(_elasticityMultiplier > 0);
         vm.assume(((_maxResourceLimit / _elasticityMultiplier) * _elasticityMultiplier) == _maxResourceLimit);
-        _prevBoughtGas = uint64(bound(_prevBoughtGas, 0, _maxResourceLimit - _gasLimit));
-        _blockDiff = uint8(bound(_blockDiff, 0, 3));
+
+        // Base fee can increase quickly and mean that we can't buy the amount of gas we want.
+        // Here we add a VM assumption to bound the potential increase.
+        // Compute the maximum possible increase in base fee.
+        uint256 maxPercentIncrease = uint256(_elasticityMultiplier - 1) * 100 / uint256(_baseFeeMaxChangeDenominator);
+        // Assume that we have enough gas to burn.
+        // Compute the maximum amount of gas we'd need to burn.
+        // Assume we need 1/5 of our gas to do other stuff.
+        vm.assume(_prevBaseFee * maxPercentIncrease * _gasLimit / 100 < MAX_GAS_LIMIT * 4 / 5);
+
         // Pick a pseudorandom block number
         vm.roll(uint256(keccak256(abi.encode(_blockDiff))) % uint256(type(uint16).max) + uint256(_blockDiff));
 
         // Create a resource config to mock the call to the system config with
-        ResourceMetering.ResourceConfig memory rcfg = ResourceMetering.ResourceConfig({
+        IResourceMetering.ResourceConfig memory rcfg = IResourceMetering.ResourceConfig({
             maxResourceLimit: _maxResourceLimit,
             elasticityMultiplier: _elasticityMultiplier,
             baseFeeMaxChangeDenominator: _baseFeeMaxChangeDenominator,
@@ -1540,7 +1553,7 @@ contract OptimismPortal2WithMockERC20_Test is OptimismPortal2_FinalizeWithdrawal
             _to = address(0);
         }
         vm.assume(_data.length <= 120_000);
-        ResourceMetering.ResourceConfig memory rcfg = systemConfig.resourceConfig();
+        IResourceMetering.ResourceConfig memory rcfg = systemConfig.resourceConfig();
         _gasLimit =
             uint64(bound(_gasLimit, optimismPortal2.minimumGasLimit(uint64(_data.length)), rcfg.maxResourceLimit));
 
@@ -1764,7 +1777,7 @@ contract OptimismPortal2WithMockERC20_Test is OptimismPortal2_FinalizeWithdrawal
             _to = address(0);
         }
         vm.assume(_data.length <= 120_000);
-        ResourceMetering.ResourceConfig memory rcfg = systemConfig.resourceConfig();
+        IResourceMetering.ResourceConfig memory rcfg = systemConfig.resourceConfig();
         _gasLimit =
             uint64(bound(_gasLimit, optimismPortal2.minimumGasLimit(uint64(_data.length)), rcfg.maxResourceLimit));
 
