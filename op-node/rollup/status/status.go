@@ -76,6 +76,7 @@ var lastBlock = uint64(0)
 func (st *StatusTracker) OnEvent(ev event.Event) bool {
 	st.mu.Lock()
 	defer st.mu.Unlock()
+	st.log.Info("statusTracker", "ev", ev.String())
 
 	switch x := ev.(type) {
 	case engine.ForkchoiceUpdateEvent:
@@ -168,6 +169,7 @@ func (st *StatusTracker) OnEvent(ev event.Event) bool {
 	// we can rate-limit updates of the published data.
 	published := *st.published.Load()
 	if st.data != published {
+		st.log.Info("statusTracker", "data", st.data, "published", published)
 		published = st.data
 		st.published.Store(&published)
 	}

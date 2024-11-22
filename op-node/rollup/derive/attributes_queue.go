@@ -109,7 +109,7 @@ func (aq *AttributesQueue) createNextAttributes(ctx context.Context, batch *Sing
 	attrs.NoTxPool = true
 	attrs.Transactions = append(attrs.Transactions, batch.Transactions...)
 
-	aq.log.Info("generated attributes in payload queue", "txs", len(attrs.Transactions), "timestamp", batch.Timestamp)
+	aq.log.Info("generated attributes in payload queue", "txs", len(attrs.Transactions), "timestamp", batch.Timestamp, "batch", batch)
 
 	return attrs, nil
 }

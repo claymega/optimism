@@ -28,11 +28,13 @@ func (eq *EngDeriver) onPayloadSuccess(ev PayloadSuccessEvent) {
 
 	// If derived from L1, then it can be considered (pending) safe
 	if ev.DerivedFrom != (eth.L1BlockRef{}) {
+		eq.log.Info("debug123")
 		if ev.IsLastInSpan {
 			eq.ec.SetSafeHead(ev.Ref)
 			eq.emitter.Emit(SafeDerivedEvent{Safe: ev.Ref, DerivedFrom: ev.DerivedFrom})
 		}
 		eq.ec.SetPendingSafeL2Head(ev.Ref)
+		eq.log.Info("onPayloadSuccess", "debug")
 		eq.emitter.Emit(PendingSafeUpdateEvent{
 			PendingSafe: eq.ec.PendingSafeL2Head(),
 			Unsafe:      eq.ec.UnsafeL2Head(),
