@@ -284,6 +284,9 @@ func (d *Sequencer) onBuildSealed(x engine.BuildSealedEvent) {
 			Err: fmt.Errorf("failed to commit unsafe payload to conductor: %w", err)})
 		return
 	}
+	d.emitter.Emit(conductor.CommitPayloadEvent{
+		Info: x.Info,
+	})
 
 	// begin gossiping as soon as possible
 	// asyncGossip.Clear() will be called later if an non-temporary error is found,
@@ -687,6 +690,15 @@ func (d *Sequencer) SetMaxSafeLag(ctx context.Context, v uint64) error {
 
 func (d *Sequencer) OverrideLeader(ctx context.Context) error {
 	return d.conductor.OverrideLeader(ctx)
+}
+
+func (d *Sequencer) CommitUnsafePayload(Envelope *eth.ExecutionPayloadEnvelope) error {
+	if err := d.conductor.CommitUnsafePayload(d.ctx, Envelope); err != nil {
+		d.emitter.Emit(rollup.EngineTemporaryErrorEvent{
+			Err: fmt.Errorf("failed to commit unsafe payload to conductor: %w", err)})
+		return err
+	}
+	return nil
 }
 
 func (d *Sequencer) Close() {
