@@ -90,6 +90,7 @@ func (d *PipelineDeriver) OnEvent(ev event.Event) bool {
 		d.pipeline.Reset()
 	case PipelineStepEvent:
 		// Don't generate attributes if there are already attributes in-flight
+		d.pipeline.log.Warn("consume-pipelineStepEvent", "needAttributesConfirmation", d.needAttributesConfirmation)
 		if d.needAttributesConfirmation {
 			d.pipeline.log.Debug("Previously sent attributes are unconfirmed to be received")
 			return true

@@ -235,6 +235,7 @@ func (d *EngDeriver) OnEvent(ev event.Event) bool {
 			"unsafe_timestamp", x.Unsafe.Time)
 		d.emitter.Emit(EngineResetConfirmedEvent(x))
 	case PendingSafeRequestEvent:
+		d.log.Warn("generate-pendingSafeUpdateEvent-2")
 		d.emitter.Emit(PendingSafeUpdateEvent{
 			PendingSafe: d.ec.PendingSafeL2Head(),
 			Unsafe:      d.ec.UnsafeL2Head(),
@@ -244,6 +245,7 @@ func (d *EngDeriver) OnEvent(ev event.Event) bool {
 		// Resets/overwrites happen through engine-resets, not through promotion.
 		if x.Ref.Number > d.ec.PendingSafeL2Head().Number {
 			d.ec.SetPendingSafeL2Head(x.Ref)
+			d.log.Warn("generate-pendingSafeUpdateEvent-3")
 			d.emitter.Emit(PendingSafeUpdateEvent{
 				PendingSafe: d.ec.PendingSafeL2Head(),
 				Unsafe:      d.ec.UnsafeL2Head(),

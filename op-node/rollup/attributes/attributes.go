@@ -119,6 +119,7 @@ func (eq *AttributesHandler) onPendingSafeUpdate(x engine.PendingSafeUpdateEvent
 		// Request new attributes to be generated, only if we don't currently have attributes that have yet to be processed.
 		// It is safe to request the pipeline, the attributes-handler is the only user of it,
 		// and the pipeline will not generate another set of attributes until the last set is recognized.
+		eq.log.Warn("generate-pipelineStepEvent-1")
 		eq.emitter.Emit(derive.PipelineStepEvent{PendingSafe: x.PendingSafe})
 		return
 	}
@@ -130,6 +131,7 @@ func (eq *AttributesHandler) onPendingSafeUpdate(x engine.PendingSafeUpdateEvent
 			"pending", x.PendingSafe, "attributes_parent", eq.attributes.Parent)
 		eq.attributes = nil
 		eq.sentAttributes = false
+		eq.log.Warn("generate-pipelineStepEvent-2")
 		eq.emitter.Emit(derive.PipelineStepEvent{PendingSafe: x.PendingSafe})
 		return
 	}

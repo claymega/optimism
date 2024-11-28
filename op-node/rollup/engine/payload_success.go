@@ -35,6 +35,7 @@ func (eq *EngDeriver) onPayloadSuccess(ev PayloadSuccessEvent) {
 		}
 		eq.ec.SetPendingSafeL2Head(ev.Ref)
 		eq.log.Info("onPayloadSuccess", "debug")
+		eq.log.Warn("generate-pendingSafeUpdateEvent-1")
 		eq.emitter.Emit(PendingSafeUpdateEvent{
 			PendingSafe: eq.ec.PendingSafeL2Head(),
 			Unsafe:      eq.ec.UnsafeL2Head(),
