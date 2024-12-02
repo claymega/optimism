@@ -12,6 +12,24 @@ type StateMutatorSingleThreaded struct {
 	state *singlethreaded.State
 }
 
+func (m *StateMutatorSingleThreaded) Randomize(randSeed int64) {
+	r := testutil.NewRandHelper(randSeed)
+
+	pc := r.RandPC()
+	step := r.RandStep()
+
+	m.state.PreimageKey = r.RandHash()
+	m.state.PreimageOffset = r.Uint32()
+	m.state.Cpu.PC = pc
+	m.state.Cpu.NextPC = pc + 4
+	m.state.Cpu.HI = r.Uint32()
+	m.state.Cpu.LO = r.Uint32()
+	m.state.Heap = r.Uint32()
+	m.state.Step = step
+	m.state.LastHint = r.RandHint()
+	m.state.Registers = *r.RandRegisters()
+}
+
 var _ testutil.StateMutator = (*StateMutatorSingleThreaded)(nil)
 
 func NewStateMutatorSingleThreaded(state *singlethreaded.State) testutil.StateMutator {
@@ -60,8 +78,4 @@ func (m *StateMutatorSingleThreaded) SetPreimageOffset(val uint32) {
 
 func (m *StateMutatorSingleThreaded) SetStep(val uint64) {
 	m.state.Step = val
-}
-
-func (m *StateMutatorSingleThreaded) GetRegistersRef() *[32]uint32 {
-	return m.state.GetRegistersRef()
 }

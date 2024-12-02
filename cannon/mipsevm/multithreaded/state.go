@@ -3,24 +3,30 @@ package multithreaded
 import (
 	"encoding/binary"
 	"fmt"
+	"io"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/log"
 
 	"github.com/ethereum-optimism/optimism/cannon/mipsevm"
 	"github.com/ethereum-optimism/optimism/cannon/mipsevm/exec"
 	"github.com/ethereum-optimism/optimism/cannon/mipsevm/memory"
+	"github.com/ethereum-optimism/optimism/cannon/serialize"
 )
 
 // STATE_WITNESS_SIZE is the size of the state witness encoding in bytes.
-const STATE_WITNESS_SIZE = 163
+const STATE_WITNESS_SIZE = 172
 const (
 	MEMROOT_WITNESS_OFFSET                    = 0
 	PREIMAGE_KEY_WITNESS_OFFSET               = MEMROOT_WITNESS_OFFSET + 32
 	PREIMAGE_OFFSET_WITNESS_OFFSET            = PREIMAGE_KEY_WITNESS_OFFSET + 32
 	HEAP_WITNESS_OFFSET                       = PREIMAGE_OFFSET_WITNESS_OFFSET + 4
-	EXITCODE_WITNESS_OFFSET                   = HEAP_WITNESS_OFFSET + 4
+	LL_RESERVATION_ACTIVE_OFFSET              = HEAP_WITNESS_OFFSET + 4
+	LL_ADDRESS_OFFSET                         = LL_RESERVATION_ACTIVE_OFFSET + 1
+	LL_OWNER_THREAD_OFFSET                    = LL_ADDRESS_OFFSET + 4
+	EXITCODE_WITNESS_OFFSET                   = LL_OWNER_THREAD_OFFSET + 4
 	EXITED_WITNESS_OFFSET                     = EXITCODE_WITNESS_OFFSET + 1
 	STEP_WITNESS_OFFSET                       = EXITED_WITNESS_OFFSET + 1
 	STEPS_SINCE_CONTEXT_SWITCH_WITNESS_OFFSET = STEP_WITNESS_OFFSET + 8
@@ -32,27 +38,30 @@ const (
 )
 
 type State struct {
-	Memory *memory.Memory `json:"memory"`
+	Memory *memory.Memory
 
-	PreimageKey    common.Hash `json:"preimageKey"`
-	PreimageOffset uint32      `json:"preimageOffset"` // note that the offset includes the 8-byte length prefix
+	PreimageKey    common.Hash
+	PreimageOffset uint32 // note that the offset includes the 8-byte length prefix
 
-	Heap uint32 `json:"heap"` // to handle mmap growth
+	Heap                uint32 // to handle mmap growth
+	LLReservationActive bool   // Whether there is an active memory reservation initiated via the LL (load linked) op
+	LLAddress           uint32 // The "linked" memory address reserved via the LL (load linked) op
+	LLOwnerThread       uint32 // The id of the thread that holds the reservation on LLAddress
 
-	ExitCode uint8 `json:"exit"`
-	Exited   bool  `json:"exited"`
+	ExitCode uint8
+	Exited   bool
 
-	Step                        uint64 `json:"step"`
-	StepsSinceLastContextSwitch uint64 `json:"stepsSinceLastContextSwitch"`
-	Wakeup                      uint32 `json:"wakeup"`
+	Step                        uint64
+	StepsSinceLastContextSwitch uint64
+	Wakeup                      uint32
 
-	TraverseRight    bool           `json:"traverseRight"`
-	LeftThreadStack  []*ThreadState `json:"leftThreadStack"`
-	RightThreadStack []*ThreadState `json:"rightThreadStack"`
-	NextThreadId     uint32         `json:"nextThreadId"`
+	TraverseRight    bool
+	LeftThreadStack  []*ThreadState
+	RightThreadStack []*ThreadState
+	NextThreadId     uint32
 
 	// LastHint is optional metadata, and not part of the VM state itself.
-	LastHint hexutil.Bytes `json:"lastHint,omitempty"`
+	LastHint hexutil.Bytes
 }
 
 var _ mipsevm.FPVMState = (*State)(nil)
@@ -61,16 +70,19 @@ func CreateEmptyState() *State {
 	initThread := CreateEmptyThread()
 
 	return &State{
-		Memory:           memory.NewMemory(),
-		Heap:             0,
-		ExitCode:         0,
-		Exited:           false,
-		Step:             0,
-		Wakeup:           exec.FutexEmptyAddr,
-		TraverseRight:    false,
-		LeftThreadStack:  []*ThreadState{initThread},
-		RightThreadStack: []*ThreadState{},
-		NextThreadId:     initThread.ThreadId + 1,
+		Memory:              memory.NewMemory(),
+		Heap:                0,
+		LLReservationActive: false,
+		LLAddress:           0,
+		LLOwnerThread:       0,
+		ExitCode:            0,
+		Exited:              false,
+		Step:                0,
+		Wakeup:              exec.FutexEmptyAddr,
+		TraverseRight:       false,
+		LeftThreadStack:     []*ThreadState{initThread},
+		RightThreadStack:    []*ThreadState{},
+		NextThreadId:        initThread.ThreadId + 1,
 	}
 }
 
@@ -82,6 +94,11 @@ func CreateInitialState(pc, heapStart uint32) *State {
 	state.Heap = heapStart
 
 	return state
+}
+
+func (s *State) CreateVM(logger log.Logger, po mipsevm.PreimageOracle, stdOut, stdErr io.Writer, meta mipsevm.Metadata) mipsevm.FPVM {
+	logger.Info("Using cannon multithreaded VM")
+	return NewInstrumentedState(s, po, stdOut, stdErr, logger, meta)
 }
 
 func (s *State) GetCurrentThread() *ThreadState {
@@ -179,6 +196,9 @@ func (s *State) EncodeWitness() ([]byte, common.Hash) {
 	out = append(out, s.PreimageKey[:]...)
 	out = binary.BigEndian.AppendUint32(out, s.PreimageOffset)
 	out = binary.BigEndian.AppendUint32(out, s.Heap)
+	out = mipsevm.AppendBoolToWitness(out, s.LLReservationActive)
+	out = binary.BigEndian.AppendUint32(out, s.LLAddress)
+	out = binary.BigEndian.AppendUint32(out, s.LLOwnerThread)
 	out = append(out, s.ExitCode)
 	out = mipsevm.AppendBoolToWitness(out, s.Exited)
 
@@ -215,8 +235,176 @@ func (s *State) EncodeThreadProof() []byte {
 	return out
 }
 
-func (s *State) threadCount() int {
+func (s *State) ThreadCount() int {
 	return len(s.LeftThreadStack) + len(s.RightThreadStack)
+}
+
+// Serialize writes the state in a simple binary format which can be read again using Deserialize
+// The format is a simple concatenation of fields, with prefixed item count for repeating items and using big endian
+// encoding for numbers.
+//
+// StateVersion                uint8(1)
+// Memory                      As per Memory.Serialize
+// PreimageKey                 [32]byte
+// PreimageOffset              uint32
+// Heap                        uint32
+// ExitCode                    uint8
+// Exited                      uint8 - 0 for false, 1 for true
+// Step                        uint64
+// StepsSinceLastContextSwitch uint64
+// Wakeup                      uint32
+// TraverseRight               uint8 - 0 for false, 1 for true
+// NextThreadId                uint32
+// len(LeftThreadStack)        uint32
+// LeftThreadStack entries     as per ThreadState.Serialize
+// len(RightThreadStack)       uint32
+// RightThreadStack entries    as per ThreadState.Serialize
+// len(LastHint)			   uint32 (0 when LastHint is nil)
+// LastHint 				   []byte
+func (s *State) Serialize(out io.Writer) error {
+	bout := serialize.NewBinaryWriter(out)
+
+	if err := s.Memory.Serialize(out); err != nil {
+		return err
+	}
+	if err := bout.WriteHash(s.PreimageKey); err != nil {
+		return err
+	}
+	if err := bout.WriteUInt(s.PreimageOffset); err != nil {
+		return err
+	}
+	if err := bout.WriteUInt(s.Heap); err != nil {
+		return err
+	}
+	if err := bout.WriteBool(s.LLReservationActive); err != nil {
+		return err
+	}
+	if err := bout.WriteUInt(s.LLAddress); err != nil {
+		return err
+	}
+	if err := bout.WriteUInt(s.LLOwnerThread); err != nil {
+		return err
+	}
+	if err := bout.WriteUInt(s.ExitCode); err != nil {
+		return err
+	}
+	if err := bout.WriteBool(s.Exited); err != nil {
+		return err
+	}
+	if err := bout.WriteUInt(s.Step); err != nil {
+		return err
+	}
+	if err := bout.WriteUInt(s.StepsSinceLastContextSwitch); err != nil {
+		return err
+	}
+	if err := bout.WriteUInt(s.Wakeup); err != nil {
+		return err
+	}
+	if err := bout.WriteBool(s.TraverseRight); err != nil {
+		return err
+	}
+	if err := bout.WriteUInt(s.NextThreadId); err != nil {
+		return err
+	}
+
+	if err := bout.WriteUInt(uint32(len(s.LeftThreadStack))); err != nil {
+		return err
+	}
+	for _, stack := range s.LeftThreadStack {
+		if err := stack.Serialize(out); err != nil {
+			return err
+		}
+	}
+	if err := bout.WriteUInt(uint32(len(s.RightThreadStack))); err != nil {
+		return err
+	}
+	for _, stack := range s.RightThreadStack {
+		if err := stack.Serialize(out); err != nil {
+			return err
+		}
+	}
+	if err := bout.WriteBytes(s.LastHint); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (s *State) Deserialize(in io.Reader) error {
+	bin := serialize.NewBinaryReader(in)
+	s.Memory = memory.NewMemory()
+	if err := s.Memory.Deserialize(in); err != nil {
+		return err
+	}
+	if err := bin.ReadHash(&s.PreimageKey); err != nil {
+		return err
+	}
+	if err := bin.ReadUInt(&s.PreimageOffset); err != nil {
+		return err
+	}
+	if err := bin.ReadUInt(&s.Heap); err != nil {
+		return err
+	}
+	if err := bin.ReadBool(&s.LLReservationActive); err != nil {
+		return err
+	}
+	if err := bin.ReadUInt(&s.LLAddress); err != nil {
+		return err
+	}
+	if err := bin.ReadUInt(&s.LLOwnerThread); err != nil {
+		return err
+	}
+	if err := bin.ReadUInt(&s.ExitCode); err != nil {
+		return err
+	}
+	if err := bin.ReadBool(&s.Exited); err != nil {
+		return err
+	}
+	if err := bin.ReadUInt(&s.Step); err != nil {
+		return err
+	}
+	if err := bin.ReadUInt(&s.StepsSinceLastContextSwitch); err != nil {
+		return err
+	}
+	if err := bin.ReadUInt(&s.Wakeup); err != nil {
+		return err
+	}
+	if err := bin.ReadBool(&s.TraverseRight); err != nil {
+		return err
+	}
+
+	if err := bin.ReadUInt(&s.NextThreadId); err != nil {
+		return err
+	}
+
+	var leftThreadStackSize uint32
+	if err := bin.ReadUInt(&leftThreadStackSize); err != nil {
+		return err
+	}
+	s.LeftThreadStack = make([]*ThreadState, leftThreadStackSize)
+	for i := range s.LeftThreadStack {
+		s.LeftThreadStack[i] = &ThreadState{}
+		if err := s.LeftThreadStack[i].Deserialize(in); err != nil {
+			return err
+		}
+	}
+
+	var rightThreadStackSize uint32
+	if err := bin.ReadUInt(&rightThreadStackSize); err != nil {
+		return err
+	}
+	s.RightThreadStack = make([]*ThreadState, rightThreadStackSize)
+	for i := range s.RightThreadStack {
+		s.RightThreadStack[i] = &ThreadState{}
+		if err := s.RightThreadStack[i].Deserialize(in); err != nil {
+			return err
+		}
+	}
+
+	if err := bin.ReadBytes((*[]byte)(&s.LastHint)); err != nil {
+		return err
+	}
+	return nil
 }
 
 type StateWitness []byte
