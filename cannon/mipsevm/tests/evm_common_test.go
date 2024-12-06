@@ -10,13 +10,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/core/tracing"
-	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/stretchr/testify/require"
 
-	"github.com/ethereum-optimism/optimism/cannon/mipsevm"
 	"github.com/ethereum-optimism/optimism/cannon/mipsevm/exec"
 	"github.com/ethereum-optimism/optimism/cannon/mipsevm/memory"
 	"github.com/ethereum-optimism/optimism/cannon/mipsevm/program"
@@ -118,7 +115,7 @@ func TestEVM(t *testing.T) {
 	}
 }
 
-func TestEVMSingleStep(t *testing.T) {
+func TestEVMSingleStep_Jump(t *testing.T) {
 	var tracer *tracing.Hooks
 
 	versions := GetMipsVersionTestCases(t)
@@ -143,10 +140,10 @@ func TestEVMSingleStep(t *testing.T) {
 				goVm := v.VMFactory(nil, os.Stdout, os.Stderr, testutil.CreateLogger(), testutil.WithRandomization(int64(i)), testutil.WithPC(tt.pc), testutil.WithNextPC(tt.nextPC))
 				state := goVm.GetState()
 				state.GetMemory().SetMemory(tt.pc, tt.insn)
-				curStep := state.GetStep()
+				step := state.GetStep()
 
 				// Setup expectations
-				expected := testutil.CreateExpectedState(state)
+				expected := testutil.NewExpectedState(state)
 				expected.Step += 1
 				expected.PC = state.GetCpu().NextPC
 				expected.NextPC = tt.expectNextPC
@@ -159,15 +156,70 @@ func TestEVMSingleStep(t *testing.T) {
 
 				// Check expectations
 				expected.Validate(t, state)
+				testutil.ValidateEVM(t, stepWitness, step, goVm, v.StateHashFn, v.Contracts, tracer)
+			})
+		}
+	}
+}
 
-				evm := testutil.NewMIPSEVM(v.Contracts)
-				evm.SetTracer(tracer)
-				testutil.LogStepFailureAtCleanup(t, evm)
+func TestEVMSingleStep_Add(t *testing.T) {
+	var tracer *tracing.Hooks
 
-				evmPost := evm.Step(t, stepWitness, curStep, v.StateHashFn)
-				goPost, _ := goVm.GetState().EncodeWitness()
-				require.Equal(t, hexutil.Bytes(goPost).String(), hexutil.Bytes(evmPost).String(),
-					"mipsevm produced different state than EVM")
+	versions := GetMipsVersionTestCases(t)
+	cases := []struct {
+		name      string
+		insn      uint32
+		ifImm     bool
+		rs        uint32
+		rt        uint32
+		imm       uint16
+		expectRD  uint32
+		expectImm uint32
+	}{
+		{name: "add", insn: 0x02_32_40_20, ifImm: false, rs: uint32(12), rt: uint32(20), expectRD: uint32(32)},                         // add t0, s1, s2
+		{name: "addu", insn: 0x02_32_40_21, ifImm: false, rs: uint32(12), rt: uint32(20), expectRD: uint32(32)},                        // addu t0, s1, s2
+		{name: "addi", insn: 0x22_28_00_28, ifImm: true, rs: uint32(4), rt: uint32(1), imm: uint16(40), expectImm: uint32(44)},         // addi t0, s1, 40
+		{name: "addi sign", insn: 0x22_28_ff_fe, ifImm: true, rs: uint32(2), rt: uint32(1), imm: uint16(0xfffe), expectImm: uint32(0)}, // addi t0, s1, -2
+		{name: "addiu", insn: 0x26_28_00_28, ifImm: true, rs: uint32(4), rt: uint32(1), imm: uint16(40), expectImm: uint32(44)},        // addiu t0, s1, 40
+	}
+
+	for _, v := range versions {
+		for i, tt := range cases {
+			testName := fmt.Sprintf("%v (%v)", tt.name, v.Name)
+			t.Run(testName, func(t *testing.T) {
+				goVm := v.VMFactory(nil, os.Stdout, os.Stderr, testutil.CreateLogger(), testutil.WithRandomization(int64(i)), testutil.WithPC(0), testutil.WithNextPC(4))
+				state := goVm.GetState()
+				if tt.ifImm {
+					state.GetRegistersRef()[8] = tt.rt
+					state.GetRegistersRef()[17] = tt.rs
+				} else {
+					state.GetRegistersRef()[17] = tt.rs
+					state.GetRegistersRef()[18] = tt.rt
+				}
+				state.GetMemory().SetMemory(0, tt.insn)
+				step := state.GetStep()
+
+				// Setup expectations
+				expected := testutil.NewExpectedState(state)
+				expected.Step += 1
+				expected.PC = 4
+				expected.NextPC = 8
+
+				if tt.ifImm {
+					expected.Registers[8] = tt.expectImm
+					expected.Registers[17] = tt.rs
+				} else {
+					expected.Registers[8] = tt.expectRD
+					expected.Registers[17] = tt.rs
+					expected.Registers[18] = tt.rt
+				}
+
+				stepWitness, err := goVm.Step(true)
+				require.NoError(t, err)
+
+				// Check expectations
+				expected.Validate(t, state)
+				testutil.ValidateEVM(t, stepWitness, step, goVm, v.StateHashFn, v.Contracts, tracer)
 			})
 		}
 	}
@@ -209,7 +261,7 @@ func TestEVM_MMap(t *testing.T) {
 				state.GetRegistersRef()[5] = c.size
 				step := state.GetStep()
 
-				expected := testutil.CreateExpectedState(state)
+				expected := testutil.NewExpectedState(state)
 				expected.Step += 1
 				expected.PC = state.GetCpu().NextPC
 				expected.NextPC = state.GetCpu().NextPC + 4
@@ -232,15 +284,7 @@ func TestEVM_MMap(t *testing.T) {
 
 				// Check expectations
 				expected.Validate(t, state)
-
-				evm := testutil.NewMIPSEVM(v.Contracts)
-				evm.SetTracer(tracer)
-				testutil.LogStepFailureAtCleanup(t, evm)
-
-				evmPost := evm.Step(t, stepWitness, step, v.StateHashFn)
-				goPost, _ := goVm.GetState().EncodeWitness()
-				require.Equal(t, hexutil.Bytes(goPost).String(), hexutil.Bytes(evmPost).String(),
-					"mipsevm produced different state than EVM")
+				testutil.ValidateEVM(t, stepWitness, step, goVm, v.StateHashFn, v.Contracts, tracer)
 			})
 		}
 	}
@@ -420,9 +464,9 @@ func TestEVMSysWriteHint(t *testing.T) {
 				err := state.GetMemory().SetMemoryRange(uint32(tt.memOffset), bytes.NewReader(tt.hintData))
 				require.NoError(t, err)
 				state.GetMemory().SetMemory(state.GetPC(), insn)
-				curStep := state.GetStep()
+				step := state.GetStep()
 
-				expected := testutil.CreateExpectedState(state)
+				expected := testutil.NewExpectedState(state)
 				expected.Step += 1
 				expected.PC = state.GetCpu().NextPC
 				expected.NextPC = state.GetCpu().NextPC + 4
@@ -435,15 +479,7 @@ func TestEVMSysWriteHint(t *testing.T) {
 
 				expected.Validate(t, state)
 				require.Equal(t, tt.expectedHints, oracle.Hints())
-
-				evm := testutil.NewMIPSEVM(v.Contracts)
-				evm.SetTracer(tracer)
-				testutil.LogStepFailureAtCleanup(t, evm)
-
-				evmPost := evm.Step(t, stepWitness, curStep, v.StateHashFn)
-				goPost, _ := goVm.GetState().EncodeWitness()
-				require.Equal(t, hexutil.Bytes(goPost).String(), hexutil.Bytes(evmPost).String(),
-					"mipsevm produced different state than EVM")
+				testutil.ValidateEVM(t, stepWitness, step, goVm, v.StateHashFn, v.Contracts, tracer)
 			})
 		}
 	}
@@ -451,7 +487,6 @@ func TestEVMSysWriteHint(t *testing.T) {
 
 func TestEVMFault(t *testing.T) {
 	var tracer *tracing.Hooks // no-tracer by default, but see test_util.MarkdownTracer
-	sender := common.Address{0x13, 0x37}
 
 	versions := GetMipsVersionTestCases(t)
 	cases := []struct {
@@ -468,9 +503,6 @@ func TestEVMFault(t *testing.T) {
 		for _, tt := range cases {
 			testName := fmt.Sprintf("%v (%v)", tt.name, v.Name)
 			t.Run(testName, func(t *testing.T) {
-				env, evmState := testutil.NewEVMEnv(v.Contracts)
-				env.Config.Tracer = tracer
-
 				goVm := v.VMFactory(nil, os.Stdout, os.Stderr, testutil.CreateLogger(), testutil.WithNextPC(tt.nextPC))
 				state := goVm.GetState()
 				state.GetMemory().SetMemory(0, tt.insn)
@@ -478,31 +510,21 @@ func TestEVMFault(t *testing.T) {
 				state.GetRegistersRef()[31] = testutil.EndAddr
 
 				require.Panics(t, func() { _, _ = goVm.Step(true) })
-
-				insnProof := state.GetMemory().MerkleProof(0)
-				encodedWitness, _ := state.EncodeWitness()
-				stepWitness := &mipsevm.StepWitness{
-					State:     encodedWitness,
-					ProofData: insnProof[:],
-				}
-				input := testutil.EncodeStepInput(t, stepWitness, mipsevm.LocalContext{}, v.Contracts.Artifacts.MIPS)
-				startingGas := uint64(30_000_000)
-
-				_, _, err := env.Call(vm.AccountRef(sender), v.Contracts.Addresses.MIPS, input, startingGas, common.U2560)
-				require.EqualValues(t, err, vm.ErrExecutionReverted)
-				logs := evmState.Logs()
-				require.Equal(t, 0, len(logs))
+				testutil.AssertEVMReverts(t, state, v.Contracts, tracer)
 			})
 		}
 	}
 }
 
 func TestHelloEVM(t *testing.T) {
+	t.Parallel()
 	var tracer *tracing.Hooks // no-tracer by default, but see test_util.MarkdownTracer
 	versions := GetMipsVersionTestCases(t)
 
 	for _, v := range versions {
+		v := v
 		t.Run(v.Name, func(t *testing.T) {
+			t.Parallel()
 			evm := testutil.NewMIPSEVM(v.Contracts)
 			evm.SetTracer(tracer)
 			testutil.LogStepFailureAtCleanup(t, evm)
@@ -514,7 +536,7 @@ func TestHelloEVM(t *testing.T) {
 
 			start := time.Now()
 			for i := 0; i < 400_000; i++ {
-				curStep := goVm.GetState().GetStep()
+				step := goVm.GetState().GetStep()
 				if goVm.GetState().GetExited() {
 					break
 				}
@@ -525,12 +547,12 @@ func TestHelloEVM(t *testing.T) {
 
 				stepWitness, err := goVm.Step(true)
 				require.NoError(t, err)
-				evmPost := evm.Step(t, stepWitness, curStep, v.StateHashFn)
+				evmPost := evm.Step(t, stepWitness, step, v.StateHashFn)
 				// verify the post-state matches.
 				// TODO: maybe more readable to decode the evmPost state, and do attribute-wise comparison.
 				goPost, _ := goVm.GetState().EncodeWitness()
-				require.Equal(t, hexutil.Bytes(goPost).String(), hexutil.Bytes(evmPost).String(),
-					"mipsevm produced different state than EVM")
+				require.Equalf(t, hexutil.Bytes(goPost).String(), hexutil.Bytes(evmPost).String(),
+					"mipsevm produced different state than EVM. insn: %x", insn)
 			}
 			end := time.Now()
 			delta := end.Sub(start)
@@ -546,11 +568,14 @@ func TestHelloEVM(t *testing.T) {
 }
 
 func TestClaimEVM(t *testing.T) {
+	t.Parallel()
 	var tracer *tracing.Hooks // no-tracer by default, but see test_util.MarkdownTracer
 	versions := GetMipsVersionTestCases(t)
 
 	for _, v := range versions {
+		v := v
 		t.Run(v.Name, func(t *testing.T) {
+			t.Parallel()
 			evm := testutil.NewMIPSEVM(v.Contracts)
 			evm.SetTracer(tracer)
 			testutil.LogStepFailureAtCleanup(t, evm)
@@ -588,6 +613,53 @@ func TestClaimEVM(t *testing.T) {
 
 			require.Equal(t, expectedStdOut, stdOutBuf.String(), "stdout")
 			require.Equal(t, expectedStdErr, stdErrBuf.String(), "stderr")
+		})
+	}
+}
+
+func TestEntryEVM(t *testing.T) {
+	t.Parallel()
+	var tracer *tracing.Hooks // no-tracer by default, but see test_util.MarkdownTracer
+	versions := GetMipsVersionTestCases(t)
+
+	for _, v := range versions {
+		v := v
+		t.Run(v.Name, func(t *testing.T) {
+			t.Parallel()
+			evm := testutil.NewMIPSEVM(v.Contracts)
+			evm.SetTracer(tracer)
+			testutil.LogStepFailureAtCleanup(t, evm)
+
+			var stdOutBuf, stdErrBuf bytes.Buffer
+			elfFile := "../../testdata/example/bin/entry.elf"
+			goVm := v.ElfVMFactory(t, elfFile, nil, io.MultiWriter(&stdOutBuf, os.Stdout), io.MultiWriter(&stdErrBuf, os.Stderr), testutil.CreateLogger())
+			state := goVm.GetState()
+
+			start := time.Now()
+			for i := 0; i < 400_000; i++ {
+				curStep := goVm.GetState().GetStep()
+				if goVm.GetState().GetExited() {
+					break
+				}
+				insn := state.GetMemory().GetMemory(state.GetPC())
+				if i%10_000 == 0 { // avoid spamming test logs, we are executing many steps
+					t.Logf("step: %4d pc: 0x%08x insn: 0x%08x", state.GetStep(), state.GetPC(), insn)
+				}
+
+				stepWitness, err := goVm.Step(true)
+				require.NoError(t, err)
+				evmPost := evm.Step(t, stepWitness, curStep, v.StateHashFn)
+				// verify the post-state matches.
+				goPost, _ := goVm.GetState().EncodeWitness()
+				require.Equal(t, hexutil.Bytes(goPost).String(), hexutil.Bytes(evmPost).String(),
+					"mipsevm produced different state than EVM")
+			}
+			end := time.Now()
+			delta := end.Sub(start)
+			t.Logf("test took %s, %d instructions, %s per instruction", delta, state.GetStep(), delta/time.Duration(state.GetStep()))
+
+			require.True(t, state.GetExited(), "must complete program")
+			require.Equal(t, uint8(0), state.GetExitCode(), "exit with 0")
 		})
 	}
 }
