@@ -62,6 +62,7 @@ type EngineVersionProvider interface {
 	NewPayloadByIdVersion(timestamp uint64) eth.EngineAPIMethod
 	GetPayloadVersion(timestamp uint64) eth.EngineAPIMethod
 	GetMinimizedPayloadVersion(timestamp uint64) eth.EngineAPIMethod
+	GetBuiltPayloadVersion(timestamp uint64) eth.EngineAPIMethod
 }
 
 func NewEngineAPIClient(rpc client.RPC, l log.Logger, evp EngineVersionProvider) *EngineAPIClient {
@@ -234,6 +235,32 @@ func (s *EngineAPIClient) GetMinimizedPayload(ctx context.Context, payloadInfo e
 		return nil, err
 	}
 	e.Trace("Received payload", string(eth.GetMinimizedPayloadV3), *result.ExecutionPayload)
+	return &result, nil
+}
+
+func (s *EngineAPIClient) GetBuiltPayload(ctx context.Context, payloadInfo eth.PayloadInfo) (*eth.ExecutionPayloadEnvelope, error) {
+	e := s.log.New("payload_id", payloadInfo.ID)
+	e.Trace("getting payload")
+	var result eth.ExecutionPayloadEnvelope
+	method := s.evp.GetBuiltPayloadVersion(payloadInfo.Timestamp)
+	err := s.RPC.CallContext(ctx, &result, string(method), payloadInfo.ID)
+	if err != nil {
+		e.Warn("Failed to get payload", "payload_id", payloadInfo.ID, "err", err)
+		if rpcErr, ok := err.(rpc.Error); ok {
+			code := eth.ErrorCode(rpcErr.ErrorCode())
+			switch code {
+			case eth.UnknownPayload:
+				return nil, eth.InputError{
+					Inner: err,
+					Code:  code,
+				}
+			default:
+				return nil, fmt.Errorf("unrecognized rpc error: %w", err)
+			}
+		}
+		return nil, err
+	}
+	e.Trace("Received payload")
 	return &result, nil
 }
 
