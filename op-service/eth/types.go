@@ -517,6 +517,7 @@ const (
 	NewPayloadV2 EngineAPIMethod = "engine_newPayloadV2"
 	NewPayloadV3 EngineAPIMethod = "engine_newPayloadV3"
 
-	GetPayloadV2 EngineAPIMethod = "engine_getPayloadV2"
-	GetPayloadV3 EngineAPIMethod = "engine_getPayloadV3"
+	GetPayloadV2      EngineAPIMethod = "engine_getPayloadV2"
+	GetPayloadV3      EngineAPIMethod = "engine_getPayloadV3"
+	GetBuiltPayloadV3 EngineAPIMethod = "engine_getBuiltPayloadV3"
 )

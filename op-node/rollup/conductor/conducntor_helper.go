@@ -35,6 +35,7 @@ type BuildingState struct {
 
 type ExecEngine interface {
 	GetPayload(ctx context.Context, payloadInfo eth.PayloadInfo) (*eth.ExecutionPayloadEnvelope, error)
+	GetBuiltPayload(ctx context.Context, payloadInfo eth.PayloadInfo) (*eth.ExecutionPayloadEnvelope, error)
 }
 
 type SequencerClient interface {
@@ -90,7 +91,7 @@ func (d *ConductorHelper) onCommitPayload(ev CommitPayloadEvent) {
 	ctx, cancel := context.WithTimeout(d.ctx, getPayloadTimeout)
 	defer cancel()
 
-	envelope, err := d.engine.GetPayload(ctx, ev.Info)
+	envelope, err := d.engine.GetBuiltPayload(ctx, ev.Info)
 	if err != nil {
 		if x, ok := err.(eth.InputError); ok && x.Code == eth.UnknownPayload { //nolint:all
 			d.log.Warn("Cannot seal block, payload ID is unknown",
