@@ -193,7 +193,7 @@ func NewDriver(
 	sys.Register("l1-blocks", l1Tracker, opts)
 
 	l1 = NewMeteredL1Fetcher(l1Tracker, metrics)
-	verifConfDepth := confdepth.NewConfDepth(driverCfg.VerifierConfDepth, statusTracker.L1Head, l1)
+	verifConfDepth := confdepth.NewConfDepth(driverCfg.VerifierConfDepth, statusTracker.L1Head, statusTracker.L1Finalized, l1)
 
 	ec := engine.NewEngineController(l2, log, metrics, cfg, syncCfg,
 		sys.Register("engine-controller", nil, opts))
@@ -244,7 +244,7 @@ func NewDriver(
 	if driverCfg.SequencerEnabled {
 		asyncGossiper := async.NewAsyncGossiper(driverCtx, network, log, metrics)
 		attrBuilder := derive.NewFetchingAttributesBuilder(cfg, l1, l2)
-		sequencerConfDepth := confdepth.NewConfDepth(driverCfg.SequencerConfDepth, statusTracker.L1Head, l1)
+		sequencerConfDepth := confdepth.NewConfDepth(driverCfg.SequencerConfDepth, statusTracker.L1Head, statusTracker.L1Finalized, l1)
 		findL1Origin := sequencing.NewL1OriginSelector(log, cfg, sequencerConfDepth)
 		sequencer = sequencing.NewSequencer(driverCtx, log, cfg, attrBuilder, findL1Origin,
 			sequencerStateListener, sequencerConductor, asyncGossiper, metrics)

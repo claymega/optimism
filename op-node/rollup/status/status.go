@@ -146,3 +146,8 @@ func (st *StatusTracker) SyncStatus() *eth.SyncStatus {
 func (st *StatusTracker) L1Head() eth.L1BlockRef {
 	return st.SyncStatus().HeadL1
 }
+
+// L1Finalized is a helper function
+func (st *StatusTracker) L1Finalized() eth.L1BlockRef {
+	return st.SyncStatus().FinalizedL1
+}

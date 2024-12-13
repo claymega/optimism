@@ -28,7 +28,7 @@ func NewSystemConfigContract(caller *batching.MultiCaller, addr common.Address) 
 }
 
 func (c *SystemConfigContract) StartBlock(ctx context.Context) (*big.Int, error) {
-	result, err := c.caller.SingleCall(ctx, rpcblock.Latest, c.contract.Call(methodStartBlock))
+	result, err := c.caller.SingleCall(ctx, rpcblock.Finalized, c.contract.Call(methodStartBlock))
 	if err != nil {
 		return nil, fmt.Errorf("failed to call startBlock: %w", err)
 	}
