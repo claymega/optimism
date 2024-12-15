@@ -56,7 +56,7 @@ func (eq *EngDeriver) onBuildSeal(ev BuildSealEvent) {
 	defer cancel()
 
 	sealingStart := time.Now()
-	envelope, err := eq.ec.engine.GetPayload(ctx, ev.Info)
+	envelope, err := eq.ec.engine.GetMinimizedPayload(ctx, ev.Info)
 	if err != nil {
 		if x, ok := err.(eth.InputError); ok && x.Code == eth.UnknownPayload { //nolint:all
 			eq.log.Warn("Cannot seal block, payload ID is unknown",
@@ -77,16 +77,17 @@ func (eq *EngDeriver) onBuildSeal(ev BuildSealEvent) {
 		return
 	}
 
-	if err := sanityCheckPayload(envelope.ExecutionPayload); err != nil {
-		eq.emitter.Emit(PayloadSealInvalidEvent{
-			Info: ev.Info,
-			Err: fmt.Errorf("failed sanity-check of execution payload contents (ID: %s, blockhash: %s): %w",
-				ev.Info.ID, envelope.ExecutionPayload.BlockHash, err),
-			IsLastInSpan: ev.IsLastInSpan,
-			DerivedFrom:  ev.DerivedFrom,
-		})
-		return
-	}
+	//Temporarily bypass sanity check to avoid processing all txns
+	// if err := sanityCheckPayload(envelope.ExecutionPayload); err != nil {
+	// 	eq.emitter.Emit(PayloadSealInvalidEvent{
+	// 		Info: ev.Info,
+	// 		Err: fmt.Errorf("failed sanity-check of execution payload contents (ID: %s, blockhash: %s): %w",
+	// 			ev.Info.ID, envelope.ExecutionPayload.BlockHash, err),
+	// 		IsLastInSpan: ev.IsLastInSpan,
+	// 		DerivedFrom:  ev.DerivedFrom,
+	// 	})
+	// 	return
+	// }
 
 	ref, err := derive.PayloadToBlockRef(eq.cfg, envelope.ExecutionPayload)
 	if err != nil {

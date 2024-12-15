@@ -21,7 +21,7 @@ func (eq *EngDeriver) onBuildCancel(ev BuildCancelEvent) {
 	defer cancel()
 	// the building job gets wrapped up as soon as the payload is retrieved, there's no explicit cancel in the Engine API
 	eq.log.Warn("cancelling old block building job", "info", ev.Info)
-	_, err := eq.ec.engine.GetPayload(ctx, ev.Info)
+	_, err := eq.ec.engine.GetMinimizedPayload(ctx, ev.Info)
 	if err != nil {
 		if x, ok := err.(eth.InputError); ok && x.Code == eth.UnknownPayload { //nolint:all
 			return // if unknown, then it did not need to be cancelled anymore.

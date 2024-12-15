@@ -32,12 +32,34 @@ func (v StaticVersionProvider) NewPayloadVersion(uint64) eth.EngineAPIMethod {
 	}
 }
 
+func (v StaticVersionProvider) NewPayloadByIdVersion(uint64) eth.EngineAPIMethod {
+	switch int(v) {
+	case 1, 2:
+		panic("Unsupported Engine API version: " + strconv.Itoa(int(v)))
+	case 3:
+		return eth.NewPayloadV3
+	default:
+		panic("invalid Engine API version: " + strconv.Itoa(int(v)))
+	}
+}
+
 func (v StaticVersionProvider) GetPayloadVersion(uint64) eth.EngineAPIMethod {
 	switch int(v) {
 	case 1, 2:
 		return eth.GetPayloadV2
 	case 3:
 		return eth.GetPayloadV3
+	default:
+		panic("invalid Engine API version: " + strconv.Itoa(int(v)))
+	}
+}
+
+func (v StaticVersionProvider) GetMinimizedPayloadVersion(uint64) eth.EngineAPIMethod {
+	switch int(v) {
+	case 1, 2:
+		return eth.GetPayloadV2
+	case 3:
+		return eth.GetMinimizedPayloadV3
 	default:
 		panic("invalid Engine API version: " + strconv.Itoa(int(v)))
 	}
