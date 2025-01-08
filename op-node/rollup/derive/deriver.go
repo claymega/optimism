@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"time"
 
 	"github.com/ethereum-optimism/optimism/op-node/rollup"
 	"github.com/ethereum-optimism/optimism/op-node/rollup/event"
@@ -116,6 +117,8 @@ func (d *PipelineDeriver) OnEvent(ev event.Event) bool {
 		} else if err != nil && errors.Is(err, NotEnoughData) {
 			// don't do a backoff for this error
 			d.emitter.Emit(DeriverMoreEvent{})
+		} else if err != nil && errors.Is(err, InitialResetting) {
+			d.pipeline.pipelineInitialResetNextTime = time.Now().Add(d.pipeline.pipelineInitialResetDuration)
 		} else if err != nil {
 			d.pipeline.log.Error("Derivation process error", "err", err)
 			d.emitter.Emit(rollup.EngineTemporaryErrorEvent{Err: err})
@@ -132,6 +135,10 @@ func (d *PipelineDeriver) OnEvent(ev event.Event) bool {
 	case ConfirmReceivedAttributesEvent:
 		d.needAttributesConfirmation = false
 	default:
+		if d.pipeline.pipeLineIsInitialReset &&
+			d.pipeline.pipelineInitialResetNextTime.Before(time.Now()) {
+			d.emitter.Emit(PipelineStepEvent{PendingSafe: d.pipeline.pipelineInitialResetNextPendingSafe})
+		}
 		return false
 	}
 	return true

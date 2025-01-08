@@ -75,6 +75,8 @@ func NewConfig(ctx *cli.Context, log log.Logger) (*node.Config, error) {
 		haltOption = ""
 	}
 
+	pipelineInitialResetTimeout := ctx.Uint64(flags.PipelineInitialResetTimeout.Name)
+
 	if ctx.IsSet(flags.HeartbeatEnabledFlag.Name) ||
 		ctx.IsSet(flags.HeartbeatMonikerFlag.Name) ||
 		ctx.IsSet(flags.HeartbeatURLFlag.Name) {
@@ -112,7 +114,8 @@ func NewConfig(ctx *cli.Context, log log.Logger) (*node.Config, error) {
 		ConductorRpc:        ctx.String(flags.ConductorRpcFlag.Name),
 		ConductorRpcTimeout: ctx.Duration(flags.ConductorRpcTimeoutFlag.Name),
 
-		AltDA: altda.ReadCLIConfig(ctx),
+		AltDA:                       altda.ReadCLIConfig(ctx),
+		PipelineInitialResetTimeout: pipelineInitialResetTimeout,
 	}
 
 	if err := cfg.LoadPersisted(log); err != nil {

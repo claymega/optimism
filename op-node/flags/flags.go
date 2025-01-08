@@ -203,6 +203,13 @@ var (
 		}(),
 		Category: RollupCategory,
 	}
+	PipelineInitialResetTimeout = &cli.Uint64Flag{
+		Name:     "l1.pipeline-initial-reset-timeout",
+		Usage:    "Number of L1 blocks to keep distance from the L1 head as a sequencer for picking an L1 origin.",
+		EnvVars:  prefixEnvVars("PIPELINE_INITIAL_RESET_TIMEOUT"),
+		Value:    10,
+		Category: L1RPCCategory,
+	}
 	VerifierL1Confs = &cli.Uint64Flag{
 		Name:     "verifier.l1-confs",
 		Usage:    "Number of L1 blocks to keep distance from the L1 head before deriving L2 data from. Reorgs are supported, but may be slow to perform.",
@@ -419,6 +426,7 @@ var optionalFlags = []cli.Flag{
 	ConductorRpcTimeoutFlag,
 	SafeDBPath,
 	L2EngineKind,
+	PipelineInitialResetTimeout,
 }
 
 var DeprecatedFlags = []cli.Flag{

@@ -74,6 +74,8 @@ type Config struct {
 
 	// AltDA config
 	AltDA altda.CLIConfig
+
+	PipelineInitialResetTimeout uint64
 }
 
 type RPCConfig struct {

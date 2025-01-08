@@ -4,11 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
-	"sync/atomic"
-
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/log"
+	"io"
+	"sync/atomic"
+	"time"
 
 	"github.com/ethereum-optimism/optimism/op-node/rollup"
 	"github.com/ethereum-optimism/optimism/op-service/eth"
@@ -71,7 +71,15 @@ type DerivationPipeline struct {
 	origin         eth.L1BlockRef
 	resetL2Safe    eth.L2BlockRef
 	resetSysConfig eth.SystemConfig
-	// Its value is only 1 or 0
+
+	// InitialReset is resetting
+	pipeLineIsInitialReset              bool
+	pipelineInitialResetTimeout         uint64
+	pipelineInitialResetL2              eth.L2BlockRef
+	pipelineInitialResetNextTime        time.Time
+	pipelineInitialResetDuration        time.Duration
+	pipelineInitialResetNextPendingSafe eth.L2BlockRef
+
 	engineIsReset atomic.Bool
 
 	metrics Metrics
@@ -79,7 +87,7 @@ type DerivationPipeline struct {
 
 // NewDerivationPipeline creates a DerivationPipeline, to turn L1 data into L2 block-inputs.
 func NewDerivationPipeline(log log.Logger, rollupCfg *rollup.Config, l1Fetcher L1Fetcher, l1Blobs L1BlobsFetcher,
-	altDA AltDAInputFetcher, l2Source L2Source, metrics Metrics) *DerivationPipeline {
+	altDA AltDAInputFetcher, l2Source L2Source, metrics Metrics, pipelineInitialResetTimeout uint64) *DerivationPipeline {
 
 	// Pull stages
 	l1Traversal := NewL1Traversal(log, rollupCfg, l1Fetcher)
@@ -98,15 +106,17 @@ func NewDerivationPipeline(log log.Logger, rollupCfg *rollup.Config, l1Fetcher L
 	stages := []ResettableStage{l1Traversal, l1Src, altDA, frameQueue, bank, chInReader, batchQueue, attributesQueue}
 
 	return &DerivationPipeline{
-		log:       log,
-		rollupCfg: rollupCfg,
-		l1Fetcher: l1Fetcher,
-		altDA:     altDA,
-		stages:    stages,
-		metrics:   metrics,
-		traversal: l1Traversal,
-		attrib:    attributesQueue,
-		l2:        l2Source,
+		log:                          log,
+		rollupCfg:                    rollupCfg,
+		l1Fetcher:                    l1Fetcher,
+		altDA:                        altDA,
+		stages:                       stages,
+		metrics:                      metrics,
+		traversal:                    l1Traversal,
+		attrib:                       attributesQueue,
+		l2:                           l2Source,
+		pipelineInitialResetTimeout:  pipelineInitialResetTimeout,
+		pipelineInitialResetDuration: 5 * time.Second,
 	}
 }
 
@@ -156,8 +166,14 @@ func (dp *DerivationPipeline) Step(ctx context.Context, pendingSafeHead eth.L2Bl
 		// so we can read all the L2 data necessary for constructing the next batches that come after the safe head.
 		if pendingSafeHead != dp.resetL2Safe {
 			if err := dp.initialReset(ctx, pendingSafeHead); err != nil {
+				if errors.Is(err, InitialResetting) {
+					dp.pipelineInitialResetNextPendingSafe = pendingSafeHead
+					return nil, err
+				}
 				return nil, fmt.Errorf("failed initial reset work: %w", err)
 			}
+		} else {
+			dp.pipeLineIsInitialReset = false
 		}
 
 		resetting := dp.resetting.Load()
@@ -204,17 +220,23 @@ func (dp *DerivationPipeline) initialReset(ctx context.Context, resetL2Safe eth.
 	// Walk back L2 chain to find the L1 origin that is old enough to start buffering channel data from.
 	pipelineL2 := resetL2Safe
 	l1Origin := resetL2Safe.L1Origin
+	if dp.pipeLineIsInitialReset {
+		pipelineL2 = dp.pipelineInitialResetL2
+		l1Origin = dp.pipelineInitialResetL2.L1Origin
+	}
 
 	pipelineOrigin, err := dp.l1Fetcher.L1BlockRefByHash(ctx, l1Origin.Hash)
 	if err != nil {
 		return NewTemporaryError(fmt.Errorf("failed to fetch the new L1 progress: origin: %s; err: %w", pipelineL2.L1Origin, err))
 	}
 
+	var afterChannelTimeout bool
 	for {
 		afterL2Genesis := pipelineL2.Number > dp.rollupCfg.Genesis.L2.Number
 		afterL1Genesis := pipelineL2.L1Origin.Number > dp.rollupCfg.Genesis.L1.Number
-		afterChannelTimeout := pipelineL2.L1Origin.Number+spec.ChannelTimeout(pipelineOrigin.Time) > l1Origin.Number
-		if afterL2Genesis && afterL1Genesis && afterChannelTimeout {
+		afterPipelineInitialResetTimeout := pipelineL2.L1Origin.Number+dp.pipelineInitialResetTimeout > l1Origin.Number
+		afterChannelTimeout = pipelineL2.L1Origin.Number+spec.ChannelTimeout(pipelineOrigin.Time) > l1Origin.Number
+		if afterL2Genesis && afterL1Genesis && afterPipelineInitialResetTimeout && afterChannelTimeout {
 			parent, err := dp.l2.L2BlockRefByHash(ctx, pipelineL2.ParentHash)
 			if err != nil {
 				return NewResetError(fmt.Errorf("failed to fetch L2 parent block %s", pipelineL2.ParentID()))
@@ -225,6 +247,12 @@ func (dp *DerivationPipeline) initialReset(ctx context.Context, resetL2Safe eth.
 				return NewTemporaryError(fmt.Errorf("failed to fetch the new L1 progress: origin: %s; err: %w", pipelineL2.L1Origin, err))
 			}
 		} else {
+			if afterChannelTimeout {
+				dp.pipelineInitialResetL2 = pipelineL2
+				dp.pipeLineIsInitialReset = true
+			} else {
+				dp.pipeLineIsInitialReset = false
+			}
 			break
 		}
 	}
@@ -236,8 +264,13 @@ func (dp *DerivationPipeline) initialReset(ctx context.Context, resetL2Safe eth.
 
 	dp.origin = pipelineOrigin
 	dp.resetSysConfig = sysCfg
-	dp.resetL2Safe = resetL2Safe
-	return nil
+	dp.resetL2Safe = pipelineL2
+
+	if afterChannelTimeout {
+		return InitialResetting
+	} else {
+		return nil
+	}
 }
 
 func (dp *DerivationPipeline) ConfirmEngineReset() {
