@@ -205,7 +205,7 @@ var (
 	}
 	PipelineInitialResetTimeout = &cli.Uint64Flag{
 		Name:     "l1.pipeline-initial-reset-timeout",
-		Usage:    "Number of L1 blocks to keep distance from the L1 head as a sequencer for picking an L1 origin.",
+		Usage:    "Number of L1 blocks, control pipeline initial reset.",
 		EnvVars:  prefixEnvVars("PIPELINE_INITIAL_RESET_TIMEOUT"),
 		Value:    10,
 		Category: L1RPCCategory,
