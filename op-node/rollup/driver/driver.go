@@ -244,7 +244,7 @@ func NewDriver(
 			sequencerStateListener, sequencerConductor, asyncGossiper, metrics)
 		sys.Register("sequencer", sequencer, opts)
 
-		conductorHelper := conductor.NewConductorHelper(driverCtx, l2, log, cfg, sequencer)
+		conductorHelper := conductor.NewConductorHelper(driverCtx, l2, log, cfg, sequencer, asyncGossiper)
 		sys.Register("conductor-helper", conductorHelper, opts)
 	} else {
 		sequencer = sequencing.DisabledSequencer{}

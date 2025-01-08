@@ -16,7 +16,13 @@ import (
 // by emitting it before e.g. a derivation-pipeline step.
 // A future sequencer in an async world may manage its own execution.
 type CommitPayloadEvent struct {
+	// if payload should be promoted to safe (must also be pending safe, see DerivedFrom)
+	IsLastInSpan bool
+	// payload is promoted to pending-safe if non-zero
+	DerivedFrom eth.L1BlockRef
+
 	Info eth.PayloadInfo
+	Ref  eth.L2BlockRef
 }
 
 func (ev CommitPayloadEvent) String() string {
@@ -38,35 +44,44 @@ type ExecEngine interface {
 	GetBuiltPayload(ctx context.Context, payloadInfo eth.PayloadInfo) (*eth.ExecutionPayloadEnvelope, error)
 }
 
+type AsyncGossiper interface {
+	Gossip(payload *eth.ExecutionPayloadEnvelope)
+	Get() *eth.ExecutionPayloadEnvelope
+	Clear()
+	Stop()
+	Start()
+}
+
 type SequencerClient interface {
 	CommitUnsafePayload(*eth.ExecutionPayloadEnvelope) error
 }
 
-// Sequencer implements the sequencing interface of the driver: it starts and completes block building jobs.
 type ConductorHelper struct {
-	// closed when driver system closes, to interrupt any ongoing API calls etc.
 	ctx context.Context
 
 	engine ExecEngine // Underlying execution engine RPC
 
-	log       log.Logger
-	rollupCfg *rollup.Config
-	spec      *rollup.ChainSpec
-	sequencer SequencerClient
+	log         log.Logger
+	rollupCfg   *rollup.Config
+	spec        *rollup.ChainSpec
+	sequencer   SequencerClient
+	asyncGossip AsyncGossiper
 
 	emitter event.Emitter
 }
 
 func NewConductorHelper(driverCtx context.Context, engine ExecEngine, log log.Logger, rollupCfg *rollup.Config,
 	sequencer SequencerClient,
+	asyncGossip AsyncGossiper,
 ) *ConductorHelper {
 	return &ConductorHelper{
-		ctx:       driverCtx,
-		engine:    engine,
-		log:       log,
-		rollupCfg: rollupCfg,
-		spec:      rollup.NewChainSpec(rollupCfg),
-		sequencer: sequencer,
+		ctx:         driverCtx,
+		engine:      engine,
+		log:         log,
+		rollupCfg:   rollupCfg,
+		spec:        rollup.NewChainSpec(rollupCfg),
+		sequencer:   sequencer,
+		asyncGossip: asyncGossip,
 	}
 }
 
@@ -87,11 +102,12 @@ func (d *ConductorHelper) OnEvent(ev event.Event) bool {
 }
 
 func (d *ConductorHelper) onCommitPayload(ev CommitPayloadEvent) {
-	const getPayloadTimeout = time.Second * 10
+	const getPayloadTimeout = time.Second * 100
 	ctx, cancel := context.WithTimeout(d.ctx, getPayloadTimeout)
 	defer cancel()
 
-	envelope, err := d.engine.GetBuiltPayload(ctx, ev.Info)
+	envelope, err := d.engine.GetPayload(ctx, ev.Info)
+
 	if err != nil {
 		if x, ok := err.(eth.InputError); ok && x.Code == eth.UnknownPayload { //nolint:all
 			d.log.Warn("Cannot seal block, payload ID is unknown",
@@ -99,5 +115,6 @@ func (d *ConductorHelper) onCommitPayload(ev CommitPayloadEvent) {
 		}
 		return
 	}
+	d.asyncGossip.Gossip(envelope)
 	d.sequencer.CommitUnsafePayload(envelope)
 }
