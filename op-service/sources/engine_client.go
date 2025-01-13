@@ -62,7 +62,6 @@ type EngineVersionProvider interface {
 	NewPayloadByIdVersion(timestamp uint64) eth.EngineAPIMethod
 	GetPayloadVersion(timestamp uint64) eth.EngineAPIMethod
 	GetMinimizedPayloadVersion(timestamp uint64) eth.EngineAPIMethod
-	GetBuiltPayloadVersion(timestamp uint64) eth.EngineAPIMethod
 }
 
 func NewEngineAPIClient(rpc client.RPC, l log.Logger, evp EngineVersionProvider) *EngineAPIClient {
@@ -242,7 +241,7 @@ func (s *EngineAPIClient) GetBuiltPayload(ctx context.Context, payloadInfo eth.P
 	e := s.log.New("payload_id", payloadInfo.ID)
 	e.Trace("getting payload")
 	var result eth.ExecutionPayloadEnvelope
-	method := s.evp.GetBuiltPayloadVersion(payloadInfo.Timestamp)
+	method := s.evp.GetPayloadVersion(payloadInfo.Timestamp)
 	err := s.RPC.CallContext(ctx, &result, string(method), payloadInfo.ID)
 	if err != nil {
 		e.Warn("Failed to get payload", "payload_id", payloadInfo.ID, "err", err)

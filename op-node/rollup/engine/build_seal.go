@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/ethereum-optimism/optimism/op-node/rollup/conductor"
 	"github.com/ethereum-optimism/optimism/op-node/rollup/derive"
 	"github.com/ethereum-optimism/optimism/op-service/eth"
 )
@@ -99,6 +100,13 @@ func (eq *EngDeriver) onBuildSeal(ev BuildSealEvent) {
 		})
 		return
 	}
+
+	eq.emitter.Emit(conductor.CommitPayloadEvent{
+		IsLastInSpan: ev.IsLastInSpan,
+		DerivedFrom:  ev.DerivedFrom,
+		Info:         ev.Info,
+		Ref:          ref,
+	})
 
 	now := time.Now()
 	sealTime := now.Sub(sealingStart)
