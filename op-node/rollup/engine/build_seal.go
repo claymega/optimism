@@ -57,6 +57,12 @@ func (eq *EngDeriver) onBuildSeal(ev BuildSealEvent) {
 	defer cancel()
 
 	sealingStart := time.Now()
+	eq.emitter.Emit(conductor.CommitPayloadEvent{
+		IsLastInSpan: ev.IsLastInSpan,
+		DerivedFrom:  ev.DerivedFrom,
+		Info:         ev.Info,
+		Ref:          eth.L2BlockRef{},
+	})
 	envelope, err := eq.ec.engine.GetMinimizedPayload(ctx, ev.Info)
 	if err != nil {
 		if x, ok := err.(eth.InputError); ok && x.Code == eth.UnknownPayload { //nolint:all
@@ -100,13 +106,6 @@ func (eq *EngDeriver) onBuildSeal(ev BuildSealEvent) {
 		})
 		return
 	}
-
-	eq.emitter.Emit(conductor.CommitPayloadEvent{
-		IsLastInSpan: ev.IsLastInSpan,
-		DerivedFrom:  ev.DerivedFrom,
-		Info:         ev.Info,
-		Ref:          ref,
-	})
 
 	now := time.Now()
 	sealTime := now.Sub(sealingStart)
