@@ -15,6 +15,8 @@ var (
 	// EngineELSyncing implies that the execution engine is currently in progress of syncing.
 	EngineELSyncing = errors.New("engine is performing EL sync")
 
+	InitialResetting = errors.New("pipeline is performing reset")
+
 	// Sentinel errors, use these to get the severity of errors by calling
 	// errors.Is(err, ErrTemporary) for example.
 	ErrTemporary = NewTemporaryError(nil)
