@@ -99,6 +99,7 @@ type Sequencer struct {
 
 	emitter event.Emitter
 
+	engine           engine.ExecEngine
 	attrBuilder      derive.AttributesBuilder
 	l1OriginSelector L1OriginSelectorIface
 
@@ -125,6 +126,7 @@ type Sequencer struct {
 var _ SequencerIface = (*Sequencer)(nil)
 
 func NewSequencer(driverCtx context.Context, log log.Logger, rollupCfg *rollup.Config,
+	engine engine.ExecEngine,
 	attributesBuilder derive.AttributesBuilder,
 	l1OriginSelector L1OriginSelectorIface,
 	listener SequencerStateListener,
@@ -138,6 +140,7 @@ func NewSequencer(driverCtx context.Context, log log.Logger, rollupCfg *rollup.C
 		spec:             rollup.NewChainSpec(rollupCfg),
 		listener:         listener,
 		conductor:        conductor,
+		engine:           engine,
 		asyncGossip:      asyncGossip,
 		attrBuilder:      attributesBuilder,
 		l1OriginSelector: l1OriginSelector,
@@ -443,6 +446,16 @@ func (d *Sequencer) onEngineResetConfirmedEvent(x engine.EngineResetConfirmedEve
 	// assuming the execution-engine just churned through some work for the reset.
 	// This will also prevent any potential reset-loop from running too hot.
 	d.nextAction = d.timeNow().Add(time.Second * time.Duration(d.rollupCfg.BlockTime))
+
+	// Recover the payload building progress from the EL.
+	// The sequencer needs to first send `engine_currentPayloadBeingBuilt` to check if there is any incomplete payload being built.
+	// If there is, the sequencer needs to recover the `latest` field to this incomplete payload using `engine_getAttributes`
+	if err := d.recoverPayloadBuildingProgress(d.ctx); err != nil {
+		d.log.Error("failed to recover sequencer progress", "err", err)
+		d.emitter.Emit(rollup.CriticalErrorEvent{Err: fmt.Errorf("failed to recover sequencer progress: %w", err)})
+		return
+	}
+
 	select {
 	case d.nextActionCh <- struct{}{}:
 	default:
@@ -597,6 +610,41 @@ func (d *Sequencer) startBuildingBlock() {
 	d.emitter.Emit(engine.BuildStartEvent{
 		Attributes: withParent,
 	})
+}
+
+// recoverPayloadBuildingProgress is called once when the sequencer is started to check if the EL has any incomplete payloads
+// that need to be built.
+func (d *Sequencer) recoverPayloadBuildingProgress(ctx context.Context) error {
+	d.log.Info("Recovering sequencer progress")
+	// Check if there is any incomplete payload being built.
+	currentPayload, err := d.engine.PayloadBeingBuilt(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to get current payload being built during recovery: %w", err)
+	}
+
+	if currentPayload == nil {
+		// No incomplete payload being built, nothing to do.
+		d.log.Info("No need to recover. No payload being built")
+		return nil
+	}
+
+	// Get the parent block of the current payload being built.
+	parentBlock, err := d.engine.L2BlockRefByHash(ctx, currentPayload.ParentBlockHash)
+	if err != nil {
+		return fmt.Errorf("failed to get parent block of the current payload being built: %w", err)
+	}
+
+	// Return the building state of the current payload being built.
+	d.latest = BuildingState{
+		Onto:    parentBlock,
+		Info:    eth.PayloadInfo{ID: currentPayload.PayloadID, Timestamp: uint64(currentPayload.Timestamp)},
+		Started: time.Now(),
+	}
+	d.nextAction = time.Now()
+	d.nextActionOK = true
+
+	d.log.Info("Recovered sequencer progress", "payload_id", currentPayload.PayloadID, "timestamp", currentPayload.Timestamp, "parent_block", parentBlock.Hash)
+	return nil
 }
 
 func (d *Sequencer) NextAction() (t time.Time, ok bool) {

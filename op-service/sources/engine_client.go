@@ -245,3 +245,11 @@ func (s *EngineAPIClient) SignalSuperchainV1(ctx context.Context, recommended, r
 	})
 	return result, err
 }
+
+// PayloadBeingBuilt returns the current payload being built by the engine.
+// This is used to check if the sequencer needs to recover the payload being built.
+func (s *EngineAPIClient) PayloadBeingBuilt(ctx context.Context) (*eth.PayloadBeingBuiltEnvelope, error) {
+	var result *eth.PayloadBeingBuiltEnvelope
+	err := s.RPC.CallContext(ctx, &result, "engine_payloadBeingBuilt")
+	return result, err
+}

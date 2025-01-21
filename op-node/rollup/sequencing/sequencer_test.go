@@ -610,6 +610,7 @@ func TestSequencerBuild(t *testing.T) {
 
 type sequencerTestDeps struct {
 	cfg              *rollup.Config
+	engine           engine.ExecEngine
 	attribBuilder    *FakeAttributesBuilder
 	l1OriginSelector *FakeL1OriginSelector
 	seqState         *BasicSequencerStateListener
@@ -652,7 +653,7 @@ func createSequencer(log log.Logger) (*Sequencer, *sequencerTestDeps) {
 		conductor:   &FakeConductor{},
 		asyncGossip: &FakeAsyncGossip{},
 	}
-	seq := NewSequencer(context.Background(), log, cfg, deps.attribBuilder,
+	seq := NewSequencer(context.Background(), log, cfg, deps.engine, deps.attribBuilder,
 		deps.l1OriginSelector, deps.seqState, deps.conductor,
 		deps.asyncGossip, metrics.NoopMetrics)
 	// We create mock payloads, with the epoch-id as tx[0], rather than proper L1Block-info deposit tx.
