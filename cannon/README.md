@@ -55,7 +55,7 @@ make cannon
     --l2.claim <L2_CLAIM> \
     --l2.head <L2_HEAD> \
     --l2.blocknumber <L2_BLOCK_NUMBER> \
-    --l2.outputroot <L2_OUTPUT_ROOT>
+    --l2.outputroot <L2_OUTPUT_ROOT> \
     --datadir /tmp/fpp-database \
     --log.format terminal \
     --server
