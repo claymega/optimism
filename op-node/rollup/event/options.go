@@ -22,15 +22,15 @@ type RegisterOpts struct {
 }
 
 // 200 events may be buffered per deriver before back-pressure has to kick in
-const eventsBuffer = 200
+const eventsBuffer = 2000
 
 // 10,000 events per second is plenty.
 // If we are going through more events, the driver needs to breathe, and warn the user of a potential issue.
-const eventsLimit = rate.Limit(10_000)
+const eventsLimit = rate.Limit(100_000)
 
 // 500 events of burst: the maximum amount of events to eat up
 // past the rate limit before the rate limit becomes applicable.
-const eventsBurst = 500
+const eventsBurst = 5000
 
 func DefaultRegisterOpts() *RegisterOpts {
 	return &RegisterOpts{
