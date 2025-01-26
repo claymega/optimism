@@ -41,7 +41,6 @@ type BuildingState struct {
 
 type ExecEngine interface {
 	GetPayload(ctx context.Context, payloadInfo eth.PayloadInfo) (*eth.ExecutionPayloadEnvelope, error)
-	GetBuiltPayload(ctx context.Context, payloadInfo eth.PayloadInfo) (*eth.ExecutionPayloadEnvelope, error)
 }
 
 type AsyncGossiper interface {

@@ -503,10 +503,6 @@ func (c *Config) GetPayloadVersion(timestamp uint64) eth.EngineAPIMethod {
 	}
 }
 
-func (c *Config) GetBuiltPayloadVersion(timestamp uint64) eth.EngineAPIMethod {
-	return eth.GetBuiltPayloadV3
-}
-
 // GetOPAltDAConfig validates and returns the altDA config from the rollup config.
 func (c *Config) GetOPAltDAConfig() (altda.Config, error) {
 	if c.AltDAConfig == nil {
