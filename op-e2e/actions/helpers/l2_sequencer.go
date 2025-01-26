@@ -63,7 +63,7 @@ func NewL2Sequencer(t Testing, log log.Logger, l1 derive.L1Fetcher, blobSrc deri
 	seqStateListener := node.DisabledConfigPersistence{}
 	conduc := &conductor.NoOpConductor{}
 	asyncGossip := async.NoOpGossiper{}
-	seq := sequencing.NewSequencer(t.Ctx(), log, cfg, attrBuilder, l1OriginSelector,
+	seq := sequencing.NewSequencer(t.Ctx(), log, cfg, eng, attrBuilder, l1OriginSelector,
 		seqStateListener, conduc, asyncGossip, metr)
 	opts := event.DefaultRegisterOpts()
 	opts.Emitter = event.EmitterOpts{

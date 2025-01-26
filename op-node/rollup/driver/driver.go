@@ -247,7 +247,7 @@ func NewDriver(
 		attrBuilder := derive.NewFetchingAttributesBuilder(cfg, l1, l2)
 		sequencerConfDepth := confdepth.NewConfDepth(driverCfg.SequencerConfDepth, statusTracker.L1Head, l1)
 		findL1Origin := sequencing.NewL1OriginSelector(log, cfg, sequencerConfDepth)
-		sequencer = sequencing.NewSequencer(driverCtx, log, cfg, attrBuilder, findL1Origin,
+		sequencer = sequencing.NewSequencer(driverCtx, log, cfg, l2, attrBuilder, findL1Origin,
 			sequencerStateListener, sequencerConductor, asyncGossiper, metrics)
 		sys.Register("sequencer", sequencer, opts)
 	} else {

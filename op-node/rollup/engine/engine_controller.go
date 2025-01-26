@@ -36,12 +36,14 @@ const (
 var ErrNoFCUNeeded = errors.New("no FCU call was needed")
 
 type ExecEngine interface {
+	PayloadBeingBuilt(ctx context.Context) (*eth.PayloadBeingBuiltEnvelope, error)
 	GetPayload(ctx context.Context, payloadInfo eth.PayloadInfo) (*eth.ExecutionPayloadEnvelope, error)
 	GetMinimizedPayload(ctx context.Context, payloadInfo eth.PayloadInfo) (*eth.ExecutionPayloadEnvelope, error)
 	ForkchoiceUpdate(ctx context.Context, state *eth.ForkchoiceState, attr *eth.PayloadAttributes) (*eth.ForkchoiceUpdatedResult, error)
 	NewPayload(ctx context.Context, payload *eth.ExecutionPayload, parentBeaconBlockRoot *common.Hash) (*eth.PayloadStatusV1, error)
 	NewPayloadWithPayloadId(ctx context.Context, payloadInfo eth.PayloadInfo, parentBeaconBlockRoot *common.Hash) (*eth.PayloadStatusV1, error)
 	L2BlockRefByLabel(ctx context.Context, label eth.BlockLabel) (eth.L2BlockRef, error)
+	L2BlockRefByHash(ctx context.Context, hash common.Hash) (eth.L2BlockRef, error)
 }
 
 type EngineController struct {
