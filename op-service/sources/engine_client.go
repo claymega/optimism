@@ -237,32 +237,6 @@ func (s *EngineAPIClient) GetMinimizedPayload(ctx context.Context, payloadInfo e
 	return &result, nil
 }
 
-func (s *EngineAPIClient) GetBuiltPayload(ctx context.Context, payloadInfo eth.PayloadInfo) (*eth.ExecutionPayloadEnvelope, error) {
-	e := s.log.New("payload_id", payloadInfo.ID)
-	e.Trace("getting payload")
-	var result eth.ExecutionPayloadEnvelope
-	method := s.evp.GetPayloadVersion(payloadInfo.Timestamp)
-	err := s.RPC.CallContext(ctx, &result, string(method), payloadInfo.ID)
-	if err != nil {
-		e.Warn("Failed to get payload", "payload_id", payloadInfo.ID, "err", err)
-		if rpcErr, ok := err.(rpc.Error); ok {
-			code := eth.ErrorCode(rpcErr.ErrorCode())
-			switch code {
-			case eth.UnknownPayload:
-				return nil, eth.InputError{
-					Inner: err,
-					Code:  code,
-				}
-			default:
-				return nil, fmt.Errorf("unrecognized rpc error: %w", err)
-			}
-		}
-		return nil, err
-	}
-	e.Trace("Received payload")
-	return &result, nil
-}
-
 func (s *EngineAPIClient) SignalSuperchainV1(ctx context.Context, recommended, required params.ProtocolVersion) (params.ProtocolVersion, error) {
 	var result params.ProtocolVersion
 	err := s.RPC.CallContext(ctx, &result, "engine_signalSuperchainV1", &catalyst.SuperchainSignal{
