@@ -8,6 +8,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 
 	"github.com/ethereum-optimism/optimism/op-node/rollup/event"
+	"github.com/ethereum-optimism/optimism/op-service/eth"
 )
 
 var ErrSequencerNotEnabled = errors.New("sequencer is not enabled")
@@ -47,6 +48,10 @@ func (ds DisabledSequencer) SetMaxSafeLag(ctx context.Context, v uint64) error {
 }
 
 func (ds DisabledSequencer) OverrideLeader(ctx context.Context) error {
+	return ErrSequencerNotEnabled
+}
+
+func (ds DisabledSequencer) CommitUnsafePayload(*eth.ExecutionPayloadEnvelope) error {
 	return ErrSequencerNotEnabled
 }
 
