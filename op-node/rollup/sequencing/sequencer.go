@@ -21,7 +21,7 @@ import (
 )
 
 // sealingDuration defines the expected time it takes to seal the block
-const sealingDuration = time.Millisecond * 50
+const sealingDuration = time.Millisecond * 1
 
 var (
 	ErrSequencerAlreadyStarted = errors.New("sequencer already running")
