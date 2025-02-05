@@ -169,6 +169,12 @@ type (
 	}
 )
 
+type PayloadBeingBuiltEnvelope struct {
+	PayloadID       PayloadID   `json:"id"`
+	Timestamp       uint64      `json:"timestamp"`
+	ParentBlockHash common.Hash `json:"parent"`
+}
+
 type ExecutionPayloadEnvelope struct {
 	ParentBeaconBlockRoot *common.Hash      `json:"parentBeaconBlockRoot,omitempty"`
 	ExecutionPayload      *ExecutionPayload `json:"executionPayload"`
