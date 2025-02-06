@@ -131,6 +131,10 @@ func (st *StatusTracker) OnEvent(ev event.Event) bool {
 	// we can rate-limit updates of the published data.
 	published := *st.published.Load()
 	if st.data != published {
+		st.log.Debug("StatusTracker", "st.data", st.data, "published", published, "ev", ev.String())
+		if st.data.SafeL2 != published.SafeL2 {
+			st.log.Debug("StatusTracker2", "ev", ev.String())
+		}
 		published = st.data
 		st.published.Store(&published)
 	}

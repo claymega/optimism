@@ -366,6 +366,7 @@ func (d *EngDeriver) OnEvent(ev event.Event) bool {
 			LocalUnsafe: d.ec.UnsafeL2Head(),
 		})
 	case RequestCrossSafeEvent:
+		d.log.Warn("EngDeriver", "msg", "debug1", "ev", "RequestCrossSafeEvent")
 		d.emitter.Emit(CrossSafeUpdateEvent{
 			CrossSafe: d.ec.SafeL2Head(),
 			LocalSafe: d.ec.LocalSafeL2Head(),
@@ -385,7 +386,9 @@ func (d *EngDeriver) OnEvent(ev event.Event) bool {
 				Unsafe:      d.ec.UnsafeL2Head(),
 			})
 		}
+		d.log.Warn("EngDeriver", "x.Safe", x.Safe, "x.Ref.Number", x.Ref.Number, "num", d.ec.LocalSafeL2Head().Number)
 		if x.Safe && x.Ref.Number > d.ec.LocalSafeL2Head().Number {
+			d.log.Warn("EngDeriver", "ev", "PromoteLocalSafeEvent")
 			d.emitter.Emit(PromoteLocalSafeEvent{
 				Ref:         x.Ref,
 				DerivedFrom: x.DerivedFrom,
@@ -396,13 +399,17 @@ func (d *EngDeriver) OnEvent(ev event.Event) bool {
 		d.emitter.Emit(LocalSafeUpdateEvent(x))
 	case LocalSafeUpdateEvent:
 		// pre-interop everything that is local-safe is also immediately cross-safe.
+		d.log.Warn("InteropDeriver", "x.Ref.Time", x.Ref.Time)
 		if !d.cfg.IsInterop(x.Ref.Time) {
+			d.log.Warn("InteropDeriver", "msg", "PromoteSafeEvent1")
 			d.emitter.Emit(PromoteSafeEvent(x))
 		}
 	case PromoteSafeEvent:
 		d.ec.SetSafeHead(x.Ref)
 		// Finalizer can pick up this safe cross-block now
 		d.emitter.Emit(SafeDerivedEvent{Safe: x.Ref, DerivedFrom: x.DerivedFrom})
+		d.log.Warn("EngDeriver", "msg", "debug2", "ev", "PromoteSafeEvent",
+			"CrossSafe", d.ec.SafeL2Head(), "LocalSafe", d.ec.LocalSafeL2Head())
 		d.emitter.Emit(CrossSafeUpdateEvent{
 			CrossSafe: d.ec.SafeL2Head(),
 			LocalSafe: d.ec.LocalSafeL2Head(),
@@ -429,6 +436,7 @@ func (d *EngDeriver) OnEvent(ev event.Event) bool {
 			})
 		}
 		if x.CrossSafe {
+			d.log.Warn("EngDeriver", "msg", "debug3", "ev", "CrossUpdateRequestEvent")
 			d.emitter.Emit(CrossSafeUpdateEvent{
 				CrossSafe: d.ec.SafeL2Head(),
 				LocalSafe: d.ec.LocalSafeL2Head(),

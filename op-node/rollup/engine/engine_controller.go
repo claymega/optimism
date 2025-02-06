@@ -356,6 +356,7 @@ func (e *EngineController) InsertUnsafePayload(ctx context.Context, envelope *et
 		e.emitter.Emit(UnsafeUpdateEvent{Ref: ref})
 		e.SetLocalSafeHead(ref)
 		e.SetSafeHead(ref)
+		e.log.Warn("EngineController", "msg", "debug0")
 		e.emitter.Emit(CrossSafeUpdateEvent{LocalSafe: ref, CrossSafe: ref})
 		e.SetFinalizedHead(ref)
 	}

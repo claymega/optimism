@@ -138,6 +138,7 @@ func (d *InteropDeriver) OnEvent(ev event.Event) bool {
 		case types.CrossSafe:
 			// TODO(#11673): once we have interop reorg support, we need to clean stale blocks also.
 			delete(d.derivedFrom, candidate.Hash)
+			d.log.Warn("InteropDeriver", "msg", "PromoteSafeEvent0")
 			d.emitter.Emit(engine.PromoteSafeEvent{
 				Ref:         candidate,
 				DerivedFrom: derivedFrom,
@@ -145,6 +146,7 @@ func (d *InteropDeriver) OnEvent(ev event.Event) bool {
 		case types.Finalized:
 			// TODO(#11673): once we have interop reorg support, we need to clean stale blocks also.
 			delete(d.derivedFrom, candidate.Hash)
+			d.log.Warn("InteropDeriver", "msg", "PromoteSafeEvent2")
 			d.emitter.Emit(engine.PromoteSafeEvent{
 				Ref:         candidate,
 				DerivedFrom: derivedFrom,

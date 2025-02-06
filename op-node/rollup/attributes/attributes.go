@@ -56,6 +56,7 @@ func (eq *AttributesHandler) OnEvent(ev event.Event) bool {
 	// Events may be concurrent in the future. Prevent unsafe concurrent modifications to the attributes.
 	eq.mu.Lock()
 	defer eq.mu.Unlock()
+	eq.log.Warn("AttributesHandler", "ev", ev.String())
 
 	switch x := ev.(type) {
 	case engine.PendingSafeUpdateEvent:
@@ -191,6 +192,7 @@ func (eq *AttributesHandler) consolidateNextSafeAttributes(attributes *derive.At
 			eq.log.Error("Failed to compute block-ref from execution payload")
 			return
 		}
+		eq.log.Warn("AttributesHandler", "ev", "PromotePendingSafeEvent1")
 		eq.emitter.Emit(engine.PromotePendingSafeEvent{
 			Ref:         ref,
 			Safe:        attributes.IsLastInSpan,
